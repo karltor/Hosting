@@ -110,18 +110,51 @@
     async function load() {
       const id = location.hash.replace(/^#/, "").trim();
       if (!id) return showError("Ingen sid-ID angiven.");
+
+      // Try fresh cache first – stops F5-spam from hammering Firestore
+      const cached = readCache(id);
+      if (cached) {
+        render(cached);
+        return;
+      }
+
       try {
         const snap = await getDoc(doc(db, "sites", id));
         if (!snap.exists()) return showError("Sidan hittades inte (ID: " + id + ").");
         const data = snap.data();
-        const srcdoc = buildSrcDoc(data.files || {});
-        document.title = data.name ? data.name + " – Mini-Värd" : "Mini-Värd – sida";
-        frame.srcdoc = srcdoc;
-        frame.hidden = false;
-        status.hidden = true;
+        writeCache(id, { name: data.name, files: data.files || {} });
+        render(data);
       } catch (err) {
         showError("Kunde inte ladda sidan: " + err.message);
       }
+    }
+
+    function render(data) {
+      const srcdoc = buildSrcDoc(data.files || {});
+      document.title = data.name ? data.name + " – Mini-Värd" : "Mini-Värd – sida";
+      frame.srcdoc = srcdoc;
+      frame.hidden = false;
+      status.hidden = true;
+    }
+
+    // --- Viewer cache (5 min TTL) ---
+    const CACHE_TTL_MS = 5 * 60 * 1000;
+    function cacheKey(id) { return "miniVard.view." + id; }
+    function readCache(id) {
+      try {
+        const raw = localStorage.getItem(cacheKey(id));
+        if (!raw) return null;
+        const entry = JSON.parse(raw);
+        if (!entry || !entry.ts || Date.now() - entry.ts > CACHE_TTL_MS) return null;
+        return { name: entry.name, files: entry.files };
+      } catch { return null; }
+    }
+    function writeCache(id, data) {
+      try {
+        localStorage.setItem(cacheKey(id), JSON.stringify({
+          name: data.name, files: data.files, ts: Date.now(),
+        }));
+      } catch { /* quota or disabled – ignore */ }
     }
 
     window.addEventListener("hashchange", load);

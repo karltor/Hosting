@@ -210,6 +210,11 @@ function cacheAdd(entry) {
 }
 function cacheRemove(id) { cacheSet(cacheGet().filter((x) => x.id !== id)); }
 
+// Invalidate the viewer's per-site cache so the owner sees fresh content
+function invalidateViewCache(id) {
+  try { localStorage.removeItem("miniVard.view." + id); } catch {}
+}
+
 // --- Site list ---
 async function listUserSites() {
   if (!currentUser) return [];
@@ -303,6 +308,7 @@ async function refreshSites() {
       try {
         await deleteDoc(doc(db, "sites", s.id));
         cacheRemove(s.id);
+        invalidateViewCache(s.id);
         await refreshSites();
       } catch (err) {
         await confirmDialog({ title: "Fel", message: "Kunde inte ta bort: " + err.message, confirmText: "OK", cancelText: "" });
@@ -620,6 +626,7 @@ async function saveModal() {
         sizeBytes: total,
         updatedAt: serverTimestamp(),
       });
+      invalidateViewCache(state.id);
     }
     closeModal();
     await refreshSites();
