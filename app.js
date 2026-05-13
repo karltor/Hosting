@@ -120,39 +120,55 @@ function sortFileNames(files) {
   return [...idx, ...js, ...css, ...other];
 }
 
-// Returns { missing, orphans } given a files map.
-// `missing`: refs in index.html that point to non-existent files (excludes
-// external URLs and data:/blob: URIs).
-// `orphans`: non-index files that aren't referenced anywhere in index.html.
-function analyzeRefs(files) {
-  const html = files["index.html"] || "";
-  const refs = new Set();
-  try {
-    const parser = new DOMParser();
-    const docp = parser.parseFromString(html, "text/html");
-    docp.querySelectorAll("script[src]").forEach((el) => {
-      const ref = normalizeRef(el.getAttribute("src"));
-      if (ref) refs.add(ref);
-    });
-    docp.querySelectorAll("link[href]").forEach((el) => {
-      const rel = (el.getAttribute("rel") || "").toLowerCase();
-      if (rel && rel !== "stylesheet") return;
-      const ref = normalizeRef(el.getAttribute("href"));
-      if (ref) refs.add(ref);
-    });
-  } catch { /* fall through with empty refs */ }
-
-  const fileNames = Object.keys(files).filter((n) => n !== "index.html");
-  const fileSet = new Set(fileNames);
-  const missing = [...refs].filter((r) => !fileSet.has(r) && !fileSet.has(r.split("/").pop()));
-  const orphans = fileNames.filter((n) => !refs.has(n));
-  return { missing, orphans };
-}
-
 function normalizeRef(ref) {
   if (!ref) return null;
   if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
   return ref.replace(/^\.?\//, "").split("?")[0].split("#")[0];
+}
+
+// Rewrite index.html so script/link refs match the actual file list.
+// For each <script src=...> pointing to a missing JS file we substitute the
+// next orphan .js file (sorted by name) – same for <link href=...> and .css.
+// Returns the (possibly updated) files map.
+function autoFixRefs(files) {
+  const html = files["index.html"] || "";
+  if (!html.trim()) return files;
+  const parser = new DOMParser();
+  const docp = parser.parseFromString(html, "text/html");
+
+  const fileNames = Object.keys(files).filter((n) => n !== "index.html");
+  const fileSet = new Set(fileNames);
+
+  const collectRefs = (selector, attr, relCheck) => {
+    const els = [...docp.querySelectorAll(selector)].filter(relCheck);
+    return els.map((el) => ({ el, attr, ref: normalizeRef(el.getAttribute(attr)) }));
+  };
+  const scriptEls = collectRefs("script[src]", "src", () => true);
+  const linkEls = collectRefs("link[href]", "href", (el) => {
+    const rel = (el.getAttribute("rel") || "").toLowerCase();
+    return !rel || rel === "stylesheet";
+  });
+
+  const allRefs = new Set([...scriptEls, ...linkEls].map((r) => r.ref).filter(Boolean));
+
+  const missingJs = scriptEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
+  const missingCss = linkEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
+
+  const orphanJs = fileNames.filter((n) => getExt(n) === "js" && !allRefs.has(n)).sort();
+  const orphanCss = fileNames.filter((n) => getExt(n) === "css" && !allRefs.has(n)).sort();
+
+  let changed = false;
+  for (let i = 0; i < missingJs.length && i < orphanJs.length; i++) {
+    missingJs[i].el.setAttribute("src", orphanJs[i]);
+    changed = true;
+  }
+  for (let i = 0; i < missingCss.length && i < orphanCss.length; i++) {
+    missingCss[i].el.setAttribute("href", orphanCss[i]);
+    changed = true;
+  }
+
+  if (!changed) return files;
+  return { ...files, "index.html": "<!DOCTYPE html>\n" + docp.documentElement.outerHTML };
 }
 
 function guessExtFromContent(content) {
@@ -641,25 +657,8 @@ async function saveModal() {
     return;
   }
 
-  // Reference check: warn if index.html refers to missing files or has orphan files
-  const { missing, orphans } = analyzeRefs(state.files);
-  if (missing.length || orphans.length) {
-    const parts = [];
-    if (missing.length) {
-      parts.push("Index.html refererar till filer som inte finns:\n  • " + missing.join("\n  • "));
-    }
-    if (orphans.length) {
-      parts.push("Dessa filer laddas inte av index.html:\n  • " + orphans.join("\n  • "));
-    }
-    parts.push("Lägg till eller byt namn på filer så att de stämmer med index.html, eller spara ändå.");
-    const ok = await confirmDialog({
-      title: "Filerna matchar inte index.html",
-      message: parts.join("\n\n"),
-      confirmText: "Spara ändå",
-      cancelText: "Avbryt",
-    });
-    if (!ok) return;
-  }
+  // Auto-fix broken script/link refs in index.html so they point at real files
+  state.files = autoFixRefs(state.files);
 
   modalSave.disabled = true;
   try {
