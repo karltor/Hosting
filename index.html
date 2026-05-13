@@ -16,82 +16,46 @@
   </header>
 
   <main class="layout">
-    <section class="panel upload-panel">
-      <div class="panel-head">
-        <h2>Ladda upp en sida</h2>
-        <div class="mode-toggle">
-          <label><input type="radio" name="mode" value="simple" checked /> Enkel</label>
-          <label><input type="radio" name="mode" value="advanced" /> Avancerat (.js/.css)</label>
-        </div>
-      </div>
-
-      <form id="uploadForm">
-        <div class="row">
-          <label class="field grow">
-            <span>Sidans namn</span>
-            <input type="text" id="siteName" maxlength="60" placeholder="t.ex. Mitt skolprojekt" required />
-          </label>
-          <button type="submit" id="uploadBtn">Publicera</button>
-        </div>
-
-        <div id="simpleFields">
-          <label class="field">
-            <span>Klistra in din HTML <span class="file-inline"><input type="file" id="indexFile" accept=".html,.htm,text/html" /> eller välj fil</span></span>
-            <textarea id="indexCode" rows="10" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;&lt;body&gt;&#10;  &lt;h1&gt;Hej!&lt;/h1&gt;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"></textarea>
-          </label>
-        </div>
-
-        <div id="advancedFields" hidden>
-          <label class="field">
-            <span>index.html <span class="file-inline"><input type="file" id="indexFileAdv" accept=".html,.htm,text/html" /> eller välj fil</span></span>
-            <textarea id="indexCodeAdv" rows="8" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;..."></textarea>
-          </label>
-
-          <div class="extra-files-section">
-            <div class="extra-files-head">
-              <span>Övriga filer (.js, .css)</span>
-              <span class="file-inline"><input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple /></span>
-              <button type="button" id="addFileBtn" class="secondary">+ Lägg till tom fil</button>
-            </div>
-            <div id="extraFilesList"></div>
-          </div>
-
-          <p class="hint">Referenser i index.html till t.ex. <code>app.js</code> / <code>style.css</code> matchas automatiskt mot filerna här.</p>
-        </div>
-
-        <p id="uploadMsg" class="msg"></p>
-        <p class="limits-inline">Gränser: 200 KB/fil • 500 KB/sida • 10 filer/sida • 10 sidor/konto</p>
-      </form>
-    </section>
-
     <section class="panel sites-panel">
-      <h2>Mina sidor</h2>
+      <div class="panel-head">
+        <h2>Mina sidor</h2>
+        <button id="newSiteBtn">+ Ny sida</button>
+      </div>
       <div id="sitesEmpty" class="onboarding" hidden>
-        <p><strong>Inga sidor ännu.</strong> Så här kommer du igång:</p>
+        <p><strong>Inga sidor ännu.</strong> Klicka <em>+ Ny sida</em> för att skapa din första.</p>
         <ol>
-          <li>Skriv ett namn för din sida.</li>
-          <li>Klistra in HTML i rutan till vänster (eller välj en fil).</li>
-          <li>Tryck <em>Publicera</em>.</li>
-          <li>Din sida dyker upp här med en länk du kan dela.</li>
+          <li>Klistra in din HTML-kod i rutan som dyker upp.</li>
+          <li>Behöver du <code>.css</code> eller <code>.js</code>? Tryck <em>+ Lägg till fil</em> i sidofältet.</li>
+          <li>Ge sidan ett namn längst upp och tryck <em>Publicera</em>.</li>
+          <li>Dela länken som dyker upp i listan här.</li>
         </ol>
+        <p class="hint">Tips: får du flera kodblock från en LLM — klistra HTML i <code>index.html</code> och tryck <em>+ Lägg till fil</em> för varje extra. Filnamn skapas automatiskt om du inte skriver något själv.</p>
       </div>
       <ul id="sitesList" class="sites-list"></ul>
     </section>
   </main>
 
-  <div id="editorOverlay" class="overlay" hidden>
+  <div id="siteModal" class="overlay" hidden>
     <div class="overlay-box">
-      <header>
-        <h3 id="editorTitle">Redigera</h3>
-        <button id="editorClose" class="icon-btn" title="Stäng">✕</button>
+      <header class="modal-head">
+        <input type="text" id="modalSiteName" maxlength="60" placeholder="Sidans namn (t.ex. Mitt skolprojekt)" />
+        <button id="modalClose" class="icon-btn" title="Stäng">✕</button>
       </header>
       <div class="editor-body">
-        <aside class="file-tabs" id="fileTabs"></aside>
-        <textarea id="editorArea" spellcheck="false"></textarea>
+        <aside class="file-tabs">
+          <div id="fileTabs"></div>
+          <button type="button" id="addFileBtn" class="secondary tab-add">+ Lägg till fil</button>
+          <label class="file-upload" title="Ladda upp filer från din dator">
+            <input type="file" id="filePicker" accept=".html,.htm,.js,.css" multiple hidden />
+            <span>📂 Ladda upp filer</span>
+          </label>
+        </aside>
+        <textarea id="editorArea" spellcheck="false" placeholder="Klistra in din kod här…"></textarea>
       </div>
-      <footer>
-        <span id="editorMsg" class="msg"></span>
-        <button id="editorSave">Spara ändringar</button>
+      <footer class="modal-foot">
+        <span id="modalMsg" class="msg"></span>
+        <span class="limits-inline">Max 200 KB/fil • 500 KB/sida • 10 filer</span>
+        <button id="modalSave">Publicera</button>
       </footer>
     </div>
   </div>
