@@ -5,13 +5,12 @@ Liten Firebase-baserad värdtjänst där användare kan ladda upp HTML-sidor (va
 ## Struktur
 
 ```
-public/
-  index.html   – Dashboard: ladda upp, lista, redigera, ta bort
-  view.html    – Renderar en sparad sida via #<id>
-  app.js       – Klientlogik (Firebase Auth + Firestore)
-  style.css    – Layout (desktop-/Chromebook-först)
-firebase.json   – Hosting + Firestore-konfig
-firestore.rules – Säkerhetsregler för `sites/{id}`
+index.html   – Dashboard: ladda upp, lista, redigera, ta bort
+view.html    – Renderar en sparad sida via #<id>
+app.js       – Klientlogik (Firebase Auth + Firestore)
+style.css    – Layout (desktop-/Chromebook-först)
+.nojekyll    – Stänger av Jekyll så GitHub Pages serverar filerna som de är
+firestore.rules – Säkerhetsregler för `sites/{id}` (klistras in i Firebase-konsolen)
 ```
 
 ## Datamodell
@@ -39,17 +38,15 @@ Firestore-collection: `sites/{id}` (id = 7-tecken slumpad slug).
 
 För 100 användare → worst case ≈ 500 MB i Firestore (gratisnivå: 1 GiB).
 
-## Driftsätta
+## Driftsätta (GitHub Pages)
 
-```
-npm install -g firebase-tools
-firebase login
-firebase use hosting-9c87a
-firebase deploy --only hosting,firestore:rules
-```
+1. Pusha till `main` (eller den branch som GitHub Pages är inställd på).
+2. I Firebase-konsolen → **Authentication → Settings → Authorized domains**: lägg till `karltor.github.io` så att anonym inloggning fungerar från sajten.
+3. I Firebase-konsolen → **Firestore → Rules**: klistra in innehållet från `firestore.rules` och tryck **Publish**.
 
-Delningslänkar: `https://hosting-9c87a.web.app/view.html#<id>`
-(eller med rewrite i `firebase.json`: `/s/<id>`).
+URL:er:
+- Dashboard: `https://karltor.github.io/Hosting/`
+- Delningslänkar: `https://karltor.github.io/Hosting/view.html#<id>`
 
 ## Säkerhet
 
