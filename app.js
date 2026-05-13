@@ -125,17 +125,22 @@ function guessExtFromContent(content) {
   if (!c) return null;
   if (/^<!doctype/i.test(c) || /^<html/i.test(c) || /<body[\s>]/i.test(c)) return "html";
 
-  // Strong JS signals -> JS
-  if (/\b(function|const|let|var|=>|console\.|document\.|window\.|class\s+\w+\s*\{|import\s+|export\s+|return\s)/.test(c)) {
+  // JS keyword signals - both-sided word boundaries to avoid matching
+  // CSS terms like "letter-spacing" (was caught by \blet) or "variable" (\bvar).
+  if (/\b(function|const|let|var|return|class|import|export|typeof|new)\b/.test(c)) {
     return "js";
   }
-  // CSS selector + declaration block heuristic
-  // Looks for "selector { prop: value; }" patterns
-  if (/[#.@:\w][\w\-,>+~*\s:()."'\[\]=]*\{\s*[a-z-]+\s*:\s*[^;{}]+;/i.test(c)) {
+  // Other strong JS signals
+  if (/=>|console\.|document\.|window\.|\.querySelector|\.addEventListener/.test(c)) {
+    return "js";
+  }
+
+  // CSS selector + declaration block
+  if (/[#.@:\w*][\w\-,>+~*\s:()."'\[\]=]*\{\s*[a-z-]+\s*:\s*[^;{}]+;/i.test(c)) {
     return "css";
   }
-  // @media, @keyframes, @import etc.
-  if (/^\s*@(media|keyframes|import|font-face|supports)\b/i.test(c)) {
+  // @-rules
+  if (/^\s*@(media|keyframes|import|font-face|supports|charset|page)\b/im.test(c)) {
     return "css";
   }
   return "js";
