@@ -120,6 +120,57 @@ function sortFileNames(files) {
   return [...idx, ...js, ...css, ...other];
 }
 
+function normalizeRef(ref) {
+  if (!ref) return null;
+  if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
+  return ref.replace(/^\.?\//, "").split("?")[0].split("#")[0];
+}
+
+// Rewrite index.html so script/link refs match the actual file list.
+// For each <script src=...> pointing to a missing JS file we substitute the
+// next orphan .js file (sorted by name) – same for <link href=...> and .css.
+// Returns the (possibly updated) files map.
+function autoFixRefs(files) {
+  const html = files["index.html"] || "";
+  if (!html.trim()) return files;
+  const parser = new DOMParser();
+  const docp = parser.parseFromString(html, "text/html");
+
+  const fileNames = Object.keys(files).filter((n) => n !== "index.html");
+  const fileSet = new Set(fileNames);
+
+  const collectRefs = (selector, attr, relCheck) => {
+    const els = [...docp.querySelectorAll(selector)].filter(relCheck);
+    return els.map((el) => ({ el, attr, ref: normalizeRef(el.getAttribute(attr)) }));
+  };
+  const scriptEls = collectRefs("script[src]", "src", () => true);
+  const linkEls = collectRefs("link[href]", "href", (el) => {
+    const rel = (el.getAttribute("rel") || "").toLowerCase();
+    return !rel || rel === "stylesheet";
+  });
+
+  const allRefs = new Set([...scriptEls, ...linkEls].map((r) => r.ref).filter(Boolean));
+
+  const missingJs = scriptEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
+  const missingCss = linkEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
+
+  const orphanJs = fileNames.filter((n) => getExt(n) === "js" && !allRefs.has(n)).sort();
+  const orphanCss = fileNames.filter((n) => getExt(n) === "css" && !allRefs.has(n)).sort();
+
+  let changed = false;
+  for (let i = 0; i < missingJs.length && i < orphanJs.length; i++) {
+    missingJs[i].el.setAttribute("src", orphanJs[i]);
+    changed = true;
+  }
+  for (let i = 0; i < missingCss.length && i < orphanCss.length; i++) {
+    missingCss[i].el.setAttribute("href", orphanCss[i]);
+    changed = true;
+  }
+
+  if (!changed) return files;
+  return { ...files, "index.html": "<!DOCTYPE html>\n" + docp.documentElement.outerHTML };
+}
+
 function guessExtFromContent(content) {
   const c = content.trim();
   if (!c) return null;
@@ -605,6 +656,9 @@ async function saveModal() {
     setMsg(modalMsg, `Totalt ${(total / 1024).toFixed(1)} KB > ${LIMITS.maxTotalBytes / 1024} KB.`, "err");
     return;
   }
+
+  // Auto-fix broken script/link refs in index.html so they point at real files
+  state.files = autoFixRefs(state.files);
 
   modalSave.disabled = true;
   try {
