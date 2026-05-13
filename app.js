@@ -59,7 +59,7 @@ const filePicker = document.getElementById("filePicker");
 let currentUser = null;
 
 // Modal state
-// { mode: 'new'|'edit', id?, name, files: {name: content}, active }
+// { mode: 'new'|'edit', id?, name, files: {name: content}, active, autoNamed: Set<string> }
 let state = null;
 
 // --- Auth ---
@@ -116,26 +116,77 @@ function guessExtFromContent(content) {
   const c = content.trim();
   if (!c) return null;
   if (/^<!doctype/i.test(c) || /^<html/i.test(c) || /<body[\s>]/i.test(c)) return "html";
-  if (/^[\s\S]*\{[\s\S]*[a-z-]+\s*:\s*[^;]+;/i.test(c) && !/function|=>|const |let |var /.test(c)) return "css";
+
+  // Strong JS signals -> JS
+  if (/\b(function|const|let|var|=>|console\.|document\.|window\.|class\s+\w+\s*\{|import\s+|export\s+|return\s)/.test(c)) {
+    return "js";
+  }
+  // CSS selector + declaration block heuristic
+  // Looks for "selector { prop: value; }" patterns
+  if (/[#.@:\w][\w\-,>+~*\s:()."'\[\]=]*\{\s*[a-z-]+\s*:\s*[^;{}]+;/i.test(c)) {
+    return "css";
+  }
+  // @media, @keyframes, @import etc.
+  if (/^\s*@(media|keyframes|import|font-face|supports)\b/i.test(c)) {
+    return "css";
+  }
   return "js";
 }
 
 function autoName(existing, ext = null) {
   const has = (n) => Object.prototype.hasOwnProperty.call(existing, n);
-  if (ext === "css" || ext == null) {
-    if (!has("style.css")) return "style.css";
-  }
-  if (ext === "js" || ext == null) {
-    if (!has("script.js")) return "script.js";
-  }
+  const first = ext === "css" ? ["style.css"] :
+                ext === "js"  ? ["script.js"] :
+                                ["style.css", "script.js"];
+  for (const c of first) if (!has(c)) return c;
   let i = 2;
-  while (true) {
-    const cssN = `style${i}.css`;
-    const jsN = `script${i}.js`;
-    if (ext !== "js" && !has(cssN)) return cssN;
-    if (ext !== "css" && !has(jsN)) return jsN;
+  while (i < 100) {
+    if (ext !== "js" && !has(`style${i}.css`)) return `style${i}.css`;
+    if (ext !== "css" && !has(`script${i}.js`)) return `script${i}.js`;
     i++;
   }
+  return `fil${Date.now()}.${ext || "js"}`;
+}
+
+// --- Confirm modal (replaces window.confirm) ---
+function confirmDialog({ title = "Bekräfta", message, confirmText = "OK", cancelText = "Avbryt", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay confirm-overlay";
+    const box = document.createElement("div");
+    box.className = "confirm-box";
+    const h = document.createElement("h3");
+    h.textContent = title;
+    const p = document.createElement("p");
+    p.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "confirm-actions";
+    const cancel = document.createElement("button");
+    cancel.className = "secondary";
+    cancel.textContent = cancelText;
+    const ok = document.createElement("button");
+    ok.className = danger ? "danger" : "";
+    ok.textContent = confirmText;
+    actions.append(cancel, ok);
+    box.append(h, p, actions);
+    overlay.append(box);
+    document.body.append(overlay);
+
+    const close = (val) => {
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(false);
+      if (e.key === "Enter") close(true);
+    };
+    cancel.addEventListener("click", () => close(false));
+    ok.addEventListener("click", () => close(true));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+    document.addEventListener("keydown", onKey);
+    setTimeout(() => ok.focus(), 30);
+  });
 }
 
 // --- LocalStorage cache ---
@@ -226,12 +277,20 @@ async function refreshSites() {
     delBtn.className = "danger";
     delBtn.textContent = "Ta bort";
     delBtn.addEventListener("click", async () => {
-      if (!confirm(`Ta bort "${s.name}"? Detta går inte att ångra.`)) return;
+      const ok = await confirmDialog({
+        title: "Ta bort sida",
+        message: `Vill du verkligen ta bort "${s.name}"? Detta går inte att ångra.`,
+        confirmText: "Ta bort",
+        danger: true,
+      });
+      if (!ok) return;
       try {
         await deleteDoc(doc(db, "sites", s.id));
         cacheRemove(s.id);
         await refreshSites();
-      } catch (err) { alert("Kunde inte ta bort: " + err.message); }
+      } catch (err) {
+        await confirmDialog({ title: "Fel", message: "Kunde inte ta bort: " + err.message, confirmText: "OK", cancelText: "" });
+      }
     });
 
     actions.append(openBtn, copyBtn, editBtn, delBtn);
@@ -247,6 +306,7 @@ function openModalNew() {
     name: "",
     files: { "index.html": "" },
     active: null,
+    autoNamed: new Set(),
   };
   modalSiteName.value = "";
   modalSave.textContent = "Publicera";
@@ -264,6 +324,7 @@ function openModalEdit(site) {
     name: site.name,
     files: { ...site.files },
     active: null,
+    autoNamed: new Set(),
   };
   modalSiteName.value = site.name;
   modalSave.textContent = "Spara ändringar";
@@ -303,24 +364,29 @@ function renderTabs() {
     const nameSpan = document.createElement("span");
     nameSpan.className = "tab-name";
     nameSpan.textContent = name;
-    nameSpan.title = "Dubbelklicka för att byta namn";
     nameSpan.addEventListener("click", () => selectFile(name));
-    if (name !== "index.html") {
-      nameSpan.addEventListener("dblclick", () => startRename(name, nameSpan));
-    }
 
     tab.append(nameSpan);
 
     if (name !== "index.html") {
+      const rn = document.createElement("button");
+      rn.className = "tab-icon tab-rn";
+      rn.textContent = "✎";
+      rn.title = "Byt namn";
+      rn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        startRename(name, nameSpan);
+      });
+
       const del = document.createElement("button");
-      del.className = "tab-del";
+      del.className = "tab-icon tab-del";
       del.textContent = "✕";
       del.title = "Ta bort fil";
       del.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteFile(name);
       });
-      tab.append(del);
+      tab.append(rn, del);
     }
 
     fileTabs.append(tab);
@@ -357,6 +423,7 @@ function startRename(name, span) {
       newFiles[k === name ? clean : k] = state.files[k];
     }
     state.files = newFiles;
+    if (state.autoNamed.has(name)) state.autoNamed.delete(name);
     if (state.active === name) state.active = clean;
     setMsg(modalMsg, "");
     renderTabs();
@@ -374,9 +441,11 @@ function addFile(initialContent = "", hintExt = null) {
     return null;
   }
   syncActive();
-  const ext = hintExt || guessExtFromContent(initialContent);
-  const name = autoName(state.files, ext === "css" || ext === "js" ? ext : null);
+  const ext = hintExt || (initialContent ? guessExtFromContent(initialContent) : null);
+  const safeExt = ext === "css" || ext === "js" ? ext : null;
+  const name = autoName(state.files, safeExt);
   state.files[name] = initialContent;
+  state.autoNamed.add(name);
   state.active = name;
   renderTabs();
   editorArea.value = state.files[name];
@@ -384,14 +453,55 @@ function addFile(initialContent = "", hintExt = null) {
   return name;
 }
 
-function deleteFile(name) {
+async function deleteFile(name) {
   if (name === "index.html") return;
-  if (!confirm(`Ta bort filen ${name}?`)) return;
+  const ok = await confirmDialog({
+    title: "Ta bort fil",
+    message: `Vill du ta bort filen "${name}"?`,
+    confirmText: "Ta bort",
+    danger: true,
+  });
+  if (!ok) return;
   delete state.files[name];
+  state.autoNamed.delete(name);
   if (state.active === name) {
     state.active = Object.keys(state.files)[0];
     editorArea.value = state.files[state.active] ?? "";
   }
+  renderTabs();
+}
+
+// Auto-detect content type for auto-named files and rename if needed.
+let relabelTimer = null;
+function scheduleRelabel() {
+  clearTimeout(relabelTimer);
+  relabelTimer = setTimeout(relabelIfAuto, 400);
+}
+function relabelIfAuto() {
+  if (!state) return;
+  const cur = state.active;
+  if (!cur || cur === "index.html") return;
+  if (!state.autoNamed.has(cur)) return;
+  const content = state.files[cur] || "";
+  if (!content.trim()) return;
+  const detected = guessExtFromContent(content);
+  if (detected !== "css" && detected !== "js") return;
+  if (getExt(cur) === detected) return;
+
+  // Pretend current file isn't there so autoName picks a fresh one for this ext
+  const without = { ...state.files };
+  delete without[cur];
+  const newName = autoName(without, detected);
+  if (newName === cur || state.files.hasOwnProperty(newName)) return;
+
+  const newFiles = {};
+  for (const k of Object.keys(state.files)) {
+    newFiles[k === cur ? newName : k] = state.files[k];
+  }
+  state.files = newFiles;
+  state.autoNamed.delete(cur);
+  state.autoNamed.add(newName);
+  state.active = newName;
   renderTabs();
 }
 
@@ -495,7 +605,9 @@ modalClose.addEventListener("click", closeModal);
 modalSave.addEventListener("click", saveModal);
 addFileBtn.addEventListener("click", () => addFile());
 editorArea.addEventListener("input", () => {
-  if (state) state.files[state.active] = editorArea.value;
+  if (!state || !state.active) return;
+  state.files[state.active] = editorArea.value;
+  scheduleRelabel();
 });
 
 // Close on backdrop click
