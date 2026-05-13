@@ -29,22 +29,22 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 8px 18px;
   background: #ffffff;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.topbar h1 { margin: 0; font-size: 1.25rem; }
-.user-info { font-size: .85rem; color: var(--muted); }
+.topbar h1 { margin: 0; font-size: 1.1rem; }
+.user-info { font-size: .8rem; color: var(--muted); }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.2fr);
-  gap: 20px;
-  padding: 20px;
-  max-width: 1400px;
+  grid-template-columns: minmax(360px, 1fr) minmax(320px, 1fr);
+  gap: 12px;
+  padding: 12px;
+  max-width: 1500px;
   margin: 0 auto;
 }
 
@@ -55,76 +55,103 @@ html, body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px;
+  border-radius: 8px;
+  padding: 12px 14px;
   box-shadow: var(--shadow);
   min-width: 0;
 }
 
-.panel h2 { margin-top: 0; font-size: 1.05rem; }
+.panel h2 { margin: 0; font-size: 1rem; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
 
 .mode-toggle {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
-  padding: 8px 10px;
+  padding: 4px 8px;
   background: #f0f3f9;
   border-radius: 6px;
-  font-size: .9rem;
+  font-size: .82rem;
 }
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+.row .grow { flex: 1; margin-bottom: 0; }
+.row button { white-space: nowrap; }
 
 .field {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .field > span {
-  display: block;
-  margin-bottom: 4px;
-  font-size: .85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+  font-size: .82rem;
   color: var(--muted);
+}
+
+.file-inline {
+  font-size: .75rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.file-inline input[type=file] {
+  font-size: .72rem;
+  padding: 2px 4px;
+  width: auto;
 }
 
 input[type=text], input[type=file], textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   font: inherit;
   background: #fff;
 }
 
 textarea {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 12.5px;
   resize: vertical;
-  min-height: 120px;
+  min-height: 100px;
+  line-height: 1.4;
 }
-
-.file-alt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: .8rem;
-  color: var(--muted);
-  margin: -4px 0 14px;
-}
-.file-alt input[type=file] { width: auto; flex: 1; }
 
 .extra-files-section {
   border: 1px dashed var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin: 8px 0 12px;
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin: 6px 0 8px;
   background: #fafbfd;
 }
 .extra-files-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: .85rem;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: .82rem;
   color: var(--muted);
 }
 .extra-files-head button { padding: 5px 10px; font-size: .8rem; }
@@ -148,8 +175,8 @@ button {
   background: var(--accent);
   color: white;
   border: 0;
-  padding: 9px 16px;
-  border-radius: 6px;
+  padding: 7px 14px;
+  border-radius: 5px;
   font: inherit;
   cursor: pointer;
 }
@@ -179,17 +206,26 @@ button.danger:hover { background: var(--danger-hover); }
   margin: 4px 0 0;
 }
 
-.limits {
+.limits-inline {
+  margin: 6px 0 0;
+  font-size: .75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.onboarding {
   background: #f6f8fc;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin: 14px 0;
-  font-size: .82rem;
+  border-radius: 7px;
+  padding: 10px 14px;
+  font-size: .88rem;
   color: var(--muted);
+  margin: 8px 0 0;
 }
-.limits ul { margin: 4px 0 0; padding-left: 18px; }
-.limits strong { color: var(--text); }
+.onboarding ol { margin: 6px 0 0; padding-left: 20px; }
+.onboarding li { margin: 2px 0; }
+.onboarding strong { color: var(--text); }
+.onboarding em { color: var(--accent); font-style: normal; font-weight: 600; }
 
 .msg { margin: 8px 0 0; font-size: .85rem; min-height: 1.2em; }
 .msg.ok { color: var(--ok); }

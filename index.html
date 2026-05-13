@@ -16,73 +16,64 @@
 
   <main class="layout">
     <section class="panel upload-panel">
-      <h2>Ladda upp en sida</h2>
-
-      <div class="mode-toggle">
-        <label><input type="radio" name="mode" value="simple" checked /> Enkel (endast index.html)</label>
-        <label><input type="radio" name="mode" value="advanced" /> Avancerat (index.html + .js/.css)</label>
+      <div class="panel-head">
+        <h2>Ladda upp en sida</h2>
+        <div class="mode-toggle">
+          <label><input type="radio" name="mode" value="simple" checked /> Enkel</label>
+          <label><input type="radio" name="mode" value="advanced" /> Avancerat (.js/.css)</label>
+        </div>
       </div>
 
       <form id="uploadForm">
-        <label class="field">
-          <span>Namn på sidan (visas i din lista)</span>
-          <input type="text" id="siteName" maxlength="60" placeholder="t.ex. Mitt skolprojekt" required />
-        </label>
+        <div class="row">
+          <label class="field grow">
+            <span>Sidans namn</span>
+            <input type="text" id="siteName" maxlength="60" placeholder="t.ex. Mitt skolprojekt" required />
+          </label>
+          <button type="submit" id="uploadBtn">Publicera</button>
+        </div>
 
         <div id="simpleFields">
           <label class="field">
-            <span>Klistra in din HTML</span>
-            <textarea id="indexCode" rows="14" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;  ..."></textarea>
-          </label>
-          <label class="file-alt">
-            <span>eller ladda upp en fil:</span>
-            <input type="file" id="indexFile" accept=".html,.htm,text/html" />
+            <span>Klistra in din HTML <span class="file-inline"><input type="file" id="indexFile" accept=".html,.htm,text/html" /> eller välj fil</span></span>
+            <textarea id="indexCode" rows="10" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;&lt;body&gt;&#10;  &lt;h1&gt;Hej!&lt;/h1&gt;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"></textarea>
           </label>
         </div>
 
         <div id="advancedFields" hidden>
           <label class="field">
-            <span>index.html (krävs) – klistra in din HTML</span>
-            <textarea id="indexCodeAdv" rows="12" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;..."></textarea>
-          </label>
-          <label class="file-alt">
-            <span>eller ladda upp index-filen:</span>
-            <input type="file" id="indexFileAdv" accept=".html,.htm,text/html" />
+            <span>index.html <span class="file-inline"><input type="file" id="indexFileAdv" accept=".html,.htm,text/html" /> eller välj fil</span></span>
+            <textarea id="indexCodeAdv" rows="8" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;..."></textarea>
           </label>
 
           <div class="extra-files-section">
             <div class="extra-files-head">
               <span>Övriga filer (.js, .css)</span>
-              <button type="button" id="addFileBtn" class="secondary">+ Lägg till fil</button>
+              <span class="file-inline"><input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple /></span>
+              <button type="button" id="addFileBtn" class="secondary">+ Lägg till tom fil</button>
             </div>
             <div id="extraFilesList"></div>
-            <label class="file-alt">
-              <span>eller ladda upp flera filer på en gång:</span>
-              <input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple />
-            </label>
           </div>
 
-          <p class="hint">Referenser i din index.html till t.ex. <code>app.js</code> eller <code>style.css</code> kopplas automatiskt till motsvarande filer (matchas på filnamn) när sidan visas.</p>
+          <p class="hint">Referenser i index.html till t.ex. <code>app.js</code> / <code>style.css</code> matchas automatiskt mot filerna här.</p>
         </div>
 
-        <div class="limits">
-          <strong>Gränser:</strong>
-          <ul>
-            <li>Max 200 KB per fil</li>
-            <li>Max 500 KB totalt per sida</li>
-            <li>Max 10 filer per sida</li>
-            <li>Max 10 sidor per konto</li>
-          </ul>
-        </div>
-
-        <button type="submit" id="uploadBtn">Publicera</button>
         <p id="uploadMsg" class="msg"></p>
+        <p class="limits-inline">Gränser: 200 KB/fil • 500 KB/sida • 10 filer/sida • 10 sidor/konto</p>
       </form>
     </section>
 
     <section class="panel sites-panel">
       <h2>Mina sidor</h2>
-      <p id="sitesEmpty" class="empty" hidden>Du har inte publicerat någon sida ännu.</p>
+      <div id="sitesEmpty" class="onboarding" hidden>
+        <p><strong>Inga sidor ännu.</strong> Så här kommer du igång:</p>
+        <ol>
+          <li>Skriv ett namn för din sida.</li>
+          <li>Klistra in HTML i rutan till vänster (eller välj en fil).</li>
+          <li>Tryck <em>Publicera</em>.</li>
+          <li>Din sida dyker upp här med en länk du kan dela.</li>
+        </ol>
+      </div>
       <ul id="sitesList" class="sites-list"></ul>
     </section>
   </main>
