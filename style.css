@@ -98,8 +98,51 @@ input[type=text], input[type=file], textarea {
 textarea {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 13px;
-  resize: none;
+  resize: vertical;
+  min-height: 120px;
 }
+
+.file-alt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .8rem;
+  color: var(--muted);
+  margin: -4px 0 14px;
+}
+.file-alt input[type=file] { width: auto; flex: 1; }
+
+.extra-files-section {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  background: #fafbfd;
+}
+.extra-files-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: .85rem;
+  color: var(--muted);
+}
+.extra-files-head button { padding: 5px 10px; font-size: .8rem; }
+
+.extra-row {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.extra-row-head {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.extra-row-head .extra-name { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.extra-row .extra-content { min-height: 80px; }
 
 button {
   background: var(--accent);

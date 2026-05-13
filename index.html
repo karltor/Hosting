@@ -31,21 +31,38 @@
 
         <div id="simpleFields">
           <label class="field">
-            <span>index.html</span>
+            <span>Klistra in din HTML</span>
+            <textarea id="indexCode" rows="14" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;  ..."></textarea>
+          </label>
+          <label class="file-alt">
+            <span>eller ladda upp en fil:</span>
             <input type="file" id="indexFile" accept=".html,.htm,text/html" />
           </label>
         </div>
 
         <div id="advancedFields" hidden>
           <label class="field">
-            <span>index.html (krävs)</span>
+            <span>index.html (krävs) – klistra in din HTML</span>
+            <textarea id="indexCodeAdv" rows="12" spellcheck="false" placeholder="&lt;!DOCTYPE html&gt;..."></textarea>
+          </label>
+          <label class="file-alt">
+            <span>eller ladda upp index-filen:</span>
             <input type="file" id="indexFileAdv" accept=".html,.htm,text/html" />
           </label>
-          <label class="field">
-            <span>Övriga filer (.js, .css) – flera tillåtna</span>
-            <input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple />
-          </label>
-          <p class="hint">Referenser i din index.html till t.ex. <code>app.js</code> eller <code>style.css</code> kopplas automatiskt till de uppladdade filerna när sidan visas.</p>
+
+          <div class="extra-files-section">
+            <div class="extra-files-head">
+              <span>Övriga filer (.js, .css)</span>
+              <button type="button" id="addFileBtn" class="secondary">+ Lägg till fil</button>
+            </div>
+            <div id="extraFilesList"></div>
+            <label class="file-alt">
+              <span>eller ladda upp flera filer på en gång:</span>
+              <input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple />
+            </label>
+          </div>
+
+          <p class="hint">Referenser i din index.html till t.ex. <code>app.js</code> eller <code>style.css</code> kopplas automatiskt till motsvarande filer (matchas på filnamn) när sidan visas.</p>
         </div>
 
         <div class="limits">

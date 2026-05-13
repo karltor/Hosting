@@ -51,6 +51,10 @@ const siteNameInput = document.getElementById("siteName");
 const indexFile = document.getElementById("indexFile");
 const indexFileAdv = document.getElementById("indexFileAdv");
 const extraFiles = document.getElementById("extraFiles");
+const indexCode = document.getElementById("indexCode");
+const indexCodeAdv = document.getElementById("indexCodeAdv");
+const extraFilesList = document.getElementById("extraFilesList");
+const addFileBtn = document.getElementById("addFileBtn");
 const simpleFields = document.getElementById("simpleFields");
 const advancedFields = document.getElementById("advancedFields");
 const sitesList = document.getElementById("sitesList");
@@ -127,28 +131,68 @@ function sanitizeFileName(name) {
   return name.replace(/[^\w.\-]/g, "_");
 }
 
+// --- Extra-file rows (advanced mode) ---
+function addExtraRow(name = "", content = "") {
+  const row = document.createElement("div");
+  row.className = "extra-row";
+  row.innerHTML = `
+    <div class="extra-row-head">
+      <input type="text" class="extra-name" placeholder="filnamn.js" />
+      <button type="button" class="icon-btn extra-remove" title="Ta bort">✕</button>
+    </div>
+    <textarea class="extra-content" rows="6" spellcheck="false" placeholder="// kod här"></textarea>
+  `;
+  row.querySelector(".extra-name").value = name;
+  row.querySelector(".extra-content").value = content;
+  row.querySelector(".extra-remove").addEventListener("click", () => row.remove());
+  extraFilesList.append(row);
+  return row;
+}
+
+addFileBtn?.addEventListener("click", () => addExtraRow());
+
+// File-pickers fill the corresponding textarea/row
+indexFile?.addEventListener("change", async () => {
+  const f = indexFile.files[0];
+  if (f) indexCode.value = await readFileText(f);
+});
+indexFileAdv?.addEventListener("change", async () => {
+  const f = indexFileAdv.files[0];
+  if (f) indexCodeAdv.value = await readFileText(f);
+});
+extraFiles?.addEventListener("change", async () => {
+  for (const f of extraFiles.files) {
+    addExtraRow(sanitizeFileName(f.name), await readFileText(f));
+  }
+  extraFiles.value = "";
+});
+
 // --- Upload validation ---
 async function gatherFiles(mode) {
   const files = {};
 
   if (mode === "simple") {
-    const f = indexFile.files[0];
-    if (!f) throw new Error("Välj en index.html-fil.");
-    files["index.html"] = await readFileText(f);
+    const html = indexCode.value.trim();
+    if (!html) throw new Error("Klistra in din HTML eller välj en fil.");
+    files["index.html"] = indexCode.value;
   } else {
-    const f = indexFileAdv.files[0];
-    if (!f) throw new Error("Välj en index.html-fil.");
-    files["index.html"] = await readFileText(f);
+    const html = indexCodeAdv.value.trim();
+    if (!html) throw new Error("index.html är tom – klistra in HTML eller välj en fil.");
+    files["index.html"] = indexCodeAdv.value;
 
-    const extras = extraFiles.files;
-    for (const ef of extras) {
-      const ext = getExt(ef.name);
-      if (!ALLOWED_EXT.has(ext) || !["js", "css"].includes(ext)) {
-        throw new Error(`Otillåten filtyp: ${ef.name}. Endast .js och .css tillåts som extra filer.`);
+    const rows = extraFilesList.querySelectorAll(".extra-row");
+    for (const row of rows) {
+      const rawName = row.querySelector(".extra-name").value.trim();
+      const content = row.querySelector(".extra-content").value;
+      if (!rawName && !content) continue;
+      if (!rawName) throw new Error("En extra fil saknar namn.");
+      const ext = getExt(rawName);
+      if (!["js", "css"].includes(ext)) {
+        throw new Error(`Otillåten filtyp: ${rawName}. Endast .js och .css tillåts.`);
       }
-      const cleanName = sanitizeFileName(ef.name);
+      const cleanName = sanitizeFileName(rawName);
       if (files[cleanName]) throw new Error(`Dubblettfil: ${cleanName}`);
-      files[cleanName] = await readFileText(ef);
+      files[cleanName] = content;
     }
   }
 
@@ -208,6 +252,9 @@ uploadForm.addEventListener("submit", async (e) => {
     cacheAdd({ id, name, updatedAt: Date.now() });
     setMsg(uploadMsg, "Publicerad! Delningslänk skapad.", "ok");
     uploadForm.reset();
+    indexCode.value = "";
+    indexCodeAdv.value = "";
+    extraFilesList.innerHTML = "";
     advancedFields.hidden = true;
     simpleFields.hidden = false;
     await refreshSites();
