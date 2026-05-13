@@ -120,6 +120,41 @@ function sortFileNames(files) {
   return [...idx, ...js, ...css, ...other];
 }
 
+// Returns { missing, orphans } given a files map.
+// `missing`: refs in index.html that point to non-existent files (excludes
+// external URLs and data:/blob: URIs).
+// `orphans`: non-index files that aren't referenced anywhere in index.html.
+function analyzeRefs(files) {
+  const html = files["index.html"] || "";
+  const refs = new Set();
+  try {
+    const parser = new DOMParser();
+    const docp = parser.parseFromString(html, "text/html");
+    docp.querySelectorAll("script[src]").forEach((el) => {
+      const ref = normalizeRef(el.getAttribute("src"));
+      if (ref) refs.add(ref);
+    });
+    docp.querySelectorAll("link[href]").forEach((el) => {
+      const rel = (el.getAttribute("rel") || "").toLowerCase();
+      if (rel && rel !== "stylesheet") return;
+      const ref = normalizeRef(el.getAttribute("href"));
+      if (ref) refs.add(ref);
+    });
+  } catch { /* fall through with empty refs */ }
+
+  const fileNames = Object.keys(files).filter((n) => n !== "index.html");
+  const fileSet = new Set(fileNames);
+  const missing = [...refs].filter((r) => !fileSet.has(r) && !fileSet.has(r.split("/").pop()));
+  const orphans = fileNames.filter((n) => !refs.has(n));
+  return { missing, orphans };
+}
+
+function normalizeRef(ref) {
+  if (!ref) return null;
+  if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
+  return ref.replace(/^\.?\//, "").split("?")[0].split("#")[0];
+}
+
 function guessExtFromContent(content) {
   const c = content.trim();
   if (!c) return null;
@@ -604,6 +639,26 @@ async function saveModal() {
   if (total > LIMITS.maxTotalBytes) {
     setMsg(modalMsg, `Totalt ${(total / 1024).toFixed(1)} KB > ${LIMITS.maxTotalBytes / 1024} KB.`, "err");
     return;
+  }
+
+  // Reference check: warn if index.html refers to missing files or has orphan files
+  const { missing, orphans } = analyzeRefs(state.files);
+  if (missing.length || orphans.length) {
+    const parts = [];
+    if (missing.length) {
+      parts.push("Index.html refererar till filer som inte finns:\n  • " + missing.join("\n  • "));
+    }
+    if (orphans.length) {
+      parts.push("Dessa filer laddas inte av index.html:\n  • " + orphans.join("\n  • "));
+    }
+    parts.push("Lägg till eller byt namn på filer så att de stämmer med index.html, eller spara ändå.");
+    const ok = await confirmDialog({
+      title: "Filerna matchar inte index.html",
+      message: parts.join("\n\n"),
+      confirmText: "Spara ändå",
+      cancelText: "Avbryt",
+    });
+    if (!ok) return;
   }
 
   modalSave.disabled = true;
