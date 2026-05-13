@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini-Värd – ladda upp och dela småwebbplatser</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Mini-Värd</h1>
+    <div class="user-info">
+      <span id="userStatus">Loggar in…</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel upload-panel">
+      <h2>Ladda upp en sida</h2>
+
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode" value="simple" checked /> Enkel (endast index.html)</label>
+        <label><input type="radio" name="mode" value="advanced" /> Avancerat (index.html + .js/.css)</label>
+      </div>
+
+      <form id="uploadForm">
+        <label class="field">
+          <span>Namn på sidan (visas i din lista)</span>
+          <input type="text" id="siteName" maxlength="60" placeholder="t.ex. Mitt skolprojekt" required />
+        </label>
+
+        <div id="simpleFields">
+          <label class="field">
+            <span>index.html</span>
+            <input type="file" id="indexFile" accept=".html,.htm,text/html" />
+          </label>
+        </div>
+
+        <div id="advancedFields" hidden>
+          <label class="field">
+            <span>index.html (krävs)</span>
+            <input type="file" id="indexFileAdv" accept=".html,.htm,text/html" />
+          </label>
+          <label class="field">
+            <span>Övriga filer (.js, .css) – flera tillåtna</span>
+            <input type="file" id="extraFiles" accept=".js,.css,text/javascript,text/css" multiple />
+          </label>
+          <p class="hint">Referenser i din index.html till t.ex. <code>app.js</code> eller <code>style.css</code> kopplas automatiskt till de uppladdade filerna när sidan visas.</p>
+        </div>
+
+        <div class="limits">
+          <strong>Gränser:</strong>
+          <ul>
+            <li>Max 200 KB per fil</li>
+            <li>Max 500 KB totalt per sida</li>
+            <li>Max 10 filer per sida</li>
+            <li>Max 10 sidor per konto</li>
+          </ul>
+        </div>
+
+        <button type="submit" id="uploadBtn">Publicera</button>
+        <p id="uploadMsg" class="msg"></p>
+      </form>
+    </section>
+
+    <section class="panel sites-panel">
+      <h2>Mina sidor</h2>
+      <p id="sitesEmpty" class="empty" hidden>Du har inte publicerat någon sida ännu.</p>
+      <ul id="sitesList" class="sites-list"></ul>
+    </section>
+  </main>
+
+  <div id="editorOverlay" class="overlay" hidden>
+    <div class="overlay-box">
+      <header>
+        <h3 id="editorTitle">Redigera</h3>
+        <button id="editorClose" class="icon-btn" title="Stäng">✕</button>
+      </header>
+      <div class="editor-body">
+        <aside class="file-tabs" id="fileTabs"></aside>
+        <textarea id="editorArea" spellcheck="false"></textarea>
+      </div>
+      <footer>
+        <span id="editorMsg" class="msg"></span>
+        <button id="editorSave">Spara ändringar</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

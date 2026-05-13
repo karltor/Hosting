@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini-Värd – sida</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1c2030; color: #e8eaf0; font-family: system-ui, sans-serif; }
+    #status { padding: 20px; text-align: center; }
+    iframe { border: 0; width: 100%; height: 100vh; background: #fff; display: block; }
+    a { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div id="status">Laddar…</div>
+  <iframe id="frame" hidden sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAElhf7kYZbEo54MR3VO5nBBtipEw4IIVE",
+      authDomain: "hosting-9c87a.firebaseapp.com",
+      projectId: "hosting-9c87a",
+      storageBucket: "hosting-9c87a.firebasestorage.app",
+      messagingSenderId: "876600243013",
+      appId: "1:876600243013:web:6d3e1cab364b097cecc42c",
+      measurementId: "G-YCTWS09985",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const status = document.getElementById("status");
+    const frame = document.getElementById("frame");
+
+    function showError(text) {
+      status.innerHTML = "";
+      const p = document.createElement("p");
+      p.textContent = text;
+      const back = document.createElement("p");
+      back.innerHTML = '<a href="index.html">Tillbaka till Mini-Värd</a>';
+      status.append(p, back);
+      status.hidden = false;
+      frame.hidden = true;
+    }
+
+    function buildSrcDoc(files) {
+      const html = files["index.html"];
+      if (!html) throw new Error("index.html saknas.");
+
+      const parser = new DOMParser();
+      const docp = parser.parseFromString(html, "text/html");
+
+      // Inline <script src="x.js">  ->  <script>...</script>
+      docp.querySelectorAll("script[src]").forEach((el) => {
+        const key = matchFile(el.getAttribute("src"), files);
+        if (key) {
+          const replacement = docp.createElement("script");
+          for (const attr of [...el.attributes]) {
+            if (attr.name !== "src") replacement.setAttribute(attr.name, attr.value);
+          }
+          replacement.textContent = files[key];
+          el.replaceWith(replacement);
+        }
+      });
+
+      // Inline <link rel="stylesheet" href="x.css">  ->  <style>...</style>
+      docp.querySelectorAll("link[href]").forEach((el) => {
+        const rel = (el.getAttribute("rel") || "").toLowerCase();
+        if (rel && rel !== "stylesheet") return;
+        const key = matchFile(el.getAttribute("href"), files);
+        if (key) {
+          const style = docp.createElement("style");
+          style.textContent = files[key];
+          el.replaceWith(style);
+        }
+      });
+
+      return "<!DOCTYPE html>\n" + docp.documentElement.outerHTML;
+    }
+
+    function matchFile(ref, files) {
+      if (!ref) return null;
+      // Ignore absolute URLs
+      if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
+      // Strip leading ./ or /
+      let clean = ref.replace(/^\.?\//, "");
+      // Strip query/hash
+      clean = clean.split("?")[0].split("#")[0];
+      if (files[clean]) return clean;
+      // Try basename match
+      const base = clean.split("/").pop();
+      if (files[base]) return base;
+      return null;
+    }
+
+    async function load() {
+      const id = location.hash.replace(/^#/, "").trim();
+      if (!id) return showError("Ingen sid-ID angiven.");
+      try {
+        const snap = await getDoc(doc(db, "sites", id));
+        if (!snap.exists()) return showError("Sidan hittades inte (ID: " + id + ").");
+        const data = snap.data();
+        const srcdoc = buildSrcDoc(data.files || {});
+        document.title = data.name ? data.name + " – Mini-Värd" : "Mini-Värd – sida";
+        frame.srcdoc = srcdoc;
+        frame.hidden = false;
+        status.hidden = true;
+      } catch (err) {
+        showError("Kunde inte ladda sidan: " + err.message);
+      }
+    }
+
+    window.addEventListener("hashchange", load);
+    load();
+  </script>
+</body>
+</html>
