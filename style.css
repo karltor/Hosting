@@ -45,11 +45,21 @@ html, body {
 .panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
+.panel-head h2 { margin-right: auto; }
+
+.site-count {
+  font-size: .78rem;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef1f7;
+}
+.site-count.warn { background: #fef3c7; color: var(--warn); }
+.site-count.full { background: #fee2e2; color: var(--danger); }
 
 input[type=text], textarea {
   width: 100%;
@@ -147,13 +157,12 @@ button.danger:hover { background: var(--danger-hover); }
 .site-info { min-width: 0; }
 .site-name {
   font-weight: 600;
-  font-size: .9rem;
+  font-size: .92rem;
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.site-meta { font-size: .72rem; color: var(--muted); margin-top: 1px; }
 
 .site-actions {
   display: grid;
