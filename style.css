@@ -214,6 +214,8 @@ button.danger:hover { background: var(--danger-hover); }
   z-index: 50;
 }
 
+.overlay[hidden] { display: none; }
+
 .overlay-box {
   background: var(--panel);
   border-radius: 10px;
