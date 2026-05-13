@@ -42,6 +42,7 @@ const LS_KEY = "miniVard.sites";
 
 // --- DOM ---
 const newSiteBtn = document.getElementById("newSiteBtn");
+const siteCount = document.getElementById("siteCount");
 const sitesList = document.getElementById("sitesList");
 const sitesEmpty = document.getElementById("sitesEmpty");
 
@@ -108,6 +109,15 @@ function getExt(name) {
 
 function sanitizeFileName(name) {
   return name.replace(/[^\w.\-]/g, "_");
+}
+
+function sortFileNames(files) {
+  const keys = Object.keys(files);
+  const idx = keys.includes("index.html") ? ["index.html"] : [];
+  const js  = keys.filter((n) => n !== "index.html" && getExt(n) === "js").sort();
+  const css = keys.filter((n) => n !== "index.html" && getExt(n) === "css").sort();
+  const other = keys.filter((n) => n !== "index.html" && getExt(n) !== "js" && getExt(n) !== "css").sort();
+  return [...idx, ...js, ...css, ...other];
 }
 
 function guessExtFromContent(content) {
@@ -215,6 +225,17 @@ function shareUrlFor(id) {
   return `${location.origin}${location.pathname.replace(/index\.html$/, "")}view.html#${id}`;
 }
 
+function updateSiteCount(n) {
+  const max = LIMITS.maxSitesPerUser;
+  siteCount.textContent = `${n} / ${max}`;
+  siteCount.classList.toggle("warn", n >= max - 2 && n < max);
+  siteCount.classList.toggle("full", n >= max);
+  newSiteBtn.disabled = n >= max;
+  newSiteBtn.title = n >= max
+    ? `Du har nått gränsen ${max} sidor. Ta bort en gammal först.`
+    : "";
+}
+
 async function refreshSites() {
   sitesList.innerHTML = "";
   let sites;
@@ -225,6 +246,7 @@ async function refreshSites() {
     return;
   }
   cacheSet(sites.map((s) => ({ id: s.id, name: s.name, updatedAt: Date.now() })));
+  updateSiteCount(sites.length);
 
   if (sites.length === 0) {
     sitesEmpty.hidden = false;
@@ -235,18 +257,13 @@ async function refreshSites() {
   for (const s of sites) {
     const li = document.createElement("li");
     const url = shareUrlFor(s.id);
-    const size = Math.round((s.sizeBytes || 0) / 1024 * 10) / 10;
-    const count = Object.keys(s.files || {}).length;
 
     const meta = document.createElement("div");
     meta.className = "site-info";
     const nameEl = document.createElement("div");
     nameEl.className = "site-name";
     nameEl.textContent = s.name;
-    const metaEl = document.createElement("div");
-    metaEl.className = "site-meta";
-    metaEl.textContent = `${size} KB • ${count} fil${count === 1 ? "" : "er"}`;
-    meta.append(nameEl, metaEl);
+    meta.append(nameEl);
 
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -299,7 +316,22 @@ async function refreshSites() {
 }
 
 // --- Modal ---
-function openModalNew() {
+async function openModalNew() {
+  // Re-check live count to avoid race (UI cached an old count)
+  try {
+    const existing = await listUserSites();
+    if (existing.length >= LIMITS.maxSitesPerUser) {
+      updateSiteCount(existing.length);
+      await confirmDialog({
+        title: "Sid-gränsen nådd",
+        message: `Du har redan ${existing.length} av ${LIMITS.maxSitesPerUser} sidor. Ta bort en gammal innan du skapar en ny.`,
+        confirmText: "OK",
+        cancelText: "",
+      });
+      return;
+    }
+  } catch { /* fortsätt ändå om listning failar */ }
+
   state = {
     mode: "new",
     name: "",
@@ -355,7 +387,7 @@ function selectFile(name) {
 
 function renderTabs() {
   fileTabs.innerHTML = "";
-  for (const name of Object.keys(state.files)) {
+  for (const name of sortFileNames(state.files)) {
     const tab = document.createElement("div");
     tab.className = "tab" + (name === state.active ? " active" : "");
     tab.dataset.name = name;
