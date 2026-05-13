@@ -8,13 +8,6 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>Mini-Värd</h1>
-    <div class="user-info">
-      <span id="userStatus">Loggar in…</span>
-    </div>
-  </header>
-
   <main class="layout">
     <section class="panel sites-panel">
       <div class="panel-head">
@@ -25,13 +18,12 @@
         <p><strong>Inga sidor ännu.</strong> Klicka <em>+ Ny sida</em> för att skapa din första.</p>
         <ol>
           <li>Klistra in din HTML-kod i rutan som dyker upp.</li>
-          <li>Behöver du <code>.css</code> eller <code>.js</code>? Tryck <em>+ Lägg till fil</em> i sidofältet.</li>
+          <li>Behöver du <code>.css</code> eller <code>.js</code>? Tryck <em>+ Lägg till fil</em> i sidofältet — vi gissar filtypen automatiskt.</li>
           <li>Ge sidan ett namn längst upp och tryck <em>Publicera</em>.</li>
           <li>Dela länken som dyker upp i listan här.</li>
         </ol>
-        <p class="hint">Tips: får du flera kodblock från en LLM — klistra HTML i <code>index.html</code> och tryck <em>+ Lägg till fil</em> för varje extra. Filnamn skapas automatiskt om du inte skriver något själv.</p>
       </div>
-      <ul id="sitesList" class="sites-list"></ul>
+      <ul id="sitesList" class="sites-grid"></ul>
     </section>
   </main>
 
