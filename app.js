@@ -41,7 +41,6 @@ const LIMITS = {
 const LS_KEY = "miniVard.sites";
 
 // --- DOM ---
-const userStatus = document.getElementById("userStatus");
 const newSiteBtn = document.getElementById("newSiteBtn");
 const sitesList = document.getElementById("sitesList");
 const sitesEmpty = document.getElementById("sitesEmpty");
@@ -68,12 +67,11 @@ onAuthStateChanged(auth, async (user) => {
     try {
       await signInAnonymously(auth);
     } catch (err) {
-      userStatus.textContent = "Kunde inte logga in: " + err.message;
+      console.error("Auth-fel:", err);
     }
     return;
   }
   currentUser = user;
-  userStatus.textContent = "Inloggad anonymt";
   await refreshSites();
 });
 
@@ -259,12 +257,13 @@ async function refreshSites() {
 
     const copyBtn = document.createElement("button");
     copyBtn.className = "secondary";
-    copyBtn.textContent = "Kopiera länk";
+    copyBtn.textContent = "Kopiera";
+    copyBtn.title = "Kopiera delningslänk";
     copyBtn.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(url);
         copyBtn.textContent = "Kopierad!";
-        setTimeout(() => (copyBtn.textContent = "Kopiera länk"), 1500);
+        setTimeout(() => (copyBtn.textContent = "Kopiera"), 1500);
       } catch { copyBtn.textContent = "Misslyckades"; }
     });
 
