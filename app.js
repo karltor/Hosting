@@ -138,32 +138,96 @@ function autoFixRefs(files) {
 
   const fileNames = Object.keys(files).filter((n) => n !== "index.html");
   const fileSet = new Set(fileNames);
+  const fileMatches = (ref) => fileSet.has(ref) || fileSet.has(ref.split("/").pop());
 
-  const collectRefs = (selector, attr, relCheck) => {
-    const els = [...docp.querySelectorAll(selector)].filter(relCheck);
-    return els.map((el) => ({ el, attr, ref: normalizeRef(el.getAttribute(attr)) }));
+  const allRefs = new Set();   // every referenced name (used to detect orphans)
+  const missing = [];          // [{ref, ext, update(newName)}]
+
+  const addRef = (ref, ext, update) => {
+    if (!ref) return;
+    allRefs.add(ref);
+    if (fileMatches(ref)) return;
+    missing.push({ ref, ext, update });
   };
-  const scriptEls = collectRefs("script[src]", "src", () => true);
-  const linkEls = collectRefs("link[href]", "href", (el) => {
-    const rel = (el.getAttribute("rel") || "").toLowerCase();
-    return !rel || rel === "stylesheet";
+
+  // <script src=...>
+  docp.querySelectorAll("script[src]").forEach((el) => {
+    const ref = normalizeRef(el.getAttribute("src"));
+    addRef(ref, "js", (n) => el.setAttribute("src", n));
   });
 
-  const allRefs = new Set([...scriptEls, ...linkEls].map((r) => r.ref).filter(Boolean));
+  // <link rel=stylesheet href=...>
+  docp.querySelectorAll("link[href]").forEach((el) => {
+    const rel = (el.getAttribute("rel") || "").toLowerCase();
+    if (rel && rel !== "stylesheet") return;
+    const ref = normalizeRef(el.getAttribute("href"));
+    addRef(ref, "css", (n) => el.setAttribute("href", n));
+  });
 
-  const missingJs = scriptEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
-  const missingCss = linkEls.filter((r) => r.ref && !fileSet.has(r.ref) && !fileSet.has(r.ref.split("/").pop()));
+  // <a href=...> – only .html refs
+  docp.querySelectorAll("a[href]").forEach((el) => {
+    const ref = normalizeRef(el.getAttribute("href"));
+    if (!ref || getExt(ref) !== "html") return;
+    addRef(ref, "html", (n) => el.setAttribute("href", n));
+  });
 
-  const orphanJs = fileNames.filter((n) => getExt(n) === "js" && !allRefs.has(n)).sort();
-  const orphanCss = fileNames.filter((n) => getExt(n) === "css" && !allRefs.has(n)).sort();
+  // <form action=...> – only .html refs
+  docp.querySelectorAll("form[action]").forEach((el) => {
+    const ref = normalizeRef(el.getAttribute("action"));
+    if (!ref || getExt(ref) !== "html") return;
+    addRef(ref, "html", (n) => el.setAttribute("action", n));
+  });
 
+  // Inline event handlers (onclick, onsubmit, ...): pick up "*.html" literals
+  const LITERAL_HTML_REF = /(['"`])([^'"`\s>]+\.html)\1/g;
+  docp.querySelectorAll("*").forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (!attr.name.startsWith("on")) continue;
+      const matches = [...attr.value.matchAll(LITERAL_HTML_REF)];
+      for (const m of matches) {
+        const name = m[2];
+        const q = m[1];
+        const oldLit = m[0];
+        addRef(name, "html", (n) => {
+          const cur = el.getAttribute(attr.name) || "";
+          el.setAttribute(attr.name, cur.replace(oldLit, q + n + q));
+        });
+      }
+    }
+  });
+
+  // Inline <script>...</script> textContent: pick up "*.html" literals
+  docp.querySelectorAll("script:not([src])").forEach((el) => {
+    const matches = [...el.textContent.matchAll(LITERAL_HTML_REF)];
+    for (const m of matches) {
+      const name = m[2];
+      const q = m[1];
+      const oldLit = m[0];
+      addRef(name, "html", (n) => {
+        el.textContent = el.textContent.replace(oldLit, q + n + q);
+      });
+    }
+  });
+
+  const orphans = {
+    js:   fileNames.filter((n) => getExt(n) === "js"   && !allRefs.has(n)).sort(),
+    css:  fileNames.filter((n) => getExt(n) === "css"  && !allRefs.has(n)).sort(),
+    html: fileNames.filter((n) => getExt(n) === "html" && !allRefs.has(n)).sort(),
+  };
+
+  // Map each unique missing ref to an orphan (shared for repeated refs)
   let changed = false;
-  for (let i = 0; i < missingJs.length && i < orphanJs.length; i++) {
-    missingJs[i].el.setAttribute("src", orphanJs[i]);
-    changed = true;
-  }
-  for (let i = 0; i < missingCss.length && i < orphanCss.length; i++) {
-    missingCss[i].el.setAttribute("href", orphanCss[i]);
+  const mapping = Object.create(null);
+  for (const m of missing) {
+    const key = m.ext + ":" + m.ref;
+    if (!(key in mapping)) {
+      const o = orphans[m.ext];
+      if (!o || o.length === 0) { mapping[key] = null; continue; }
+      mapping[key] = o.shift();
+    }
+    const target = mapping[key];
+    if (!target) continue;
+    m.update(target);
     changed = true;
   }
 
@@ -199,14 +263,18 @@ function guessExtFromContent(content) {
 
 function autoName(existing, ext = null) {
   const has = (n) => Object.prototype.hasOwnProperty.call(existing, n);
-  const first = ext === "css" ? ["style.css"] :
-                ext === "js"  ? ["script.js"] :
-                                ["style.css", "script.js"];
+  const first = ext === "css"  ? ["style.css"] :
+                ext === "js"   ? ["script.js"] :
+                ext === "html" ? ["page.html"] :
+                                 ["style.css", "script.js"];
   for (const c of first) if (!has(c)) return c;
   let i = 2;
   while (i < 100) {
-    if (ext !== "js" && !has(`style${i}.css`)) return `style${i}.css`;
-    if (ext !== "css" && !has(`script${i}.js`)) return `script${i}.js`;
+    if (ext === "html") { if (!has(`page${i}.html`)) return `page${i}.html`; }
+    else {
+      if (ext !== "js" && !has(`style${i}.css`)) return `style${i}.css`;
+      if (ext !== "css" && !has(`script${i}.js`)) return `script${i}.js`;
+    }
     i++;
   }
   return `fil${Date.now()}.${ext || "js"}`;
@@ -500,8 +568,13 @@ function startRename(name, span) {
     if (!raw || raw === name) { renderTabs(); return; }
     const clean = sanitizeFileName(raw);
     const ext = getExt(clean);
-    if (!["js", "css"].includes(ext)) {
-      setMsg(modalMsg, `Filnamn måste sluta på .js eller .css.`, "err");
+    if (!["js", "css", "html"].includes(ext)) {
+      setMsg(modalMsg, `Filnamn måste sluta på .js, .css eller .html.`, "err");
+      renderTabs();
+      return;
+    }
+    if (clean === "index.html") {
+      setMsg(modalMsg, "Namnet index.html är reserverat.", "err");
       renderTabs();
       return;
     }
@@ -535,7 +608,7 @@ function addFile(initialContent = "", hintExt = null) {
   }
   syncActive();
   const ext = hintExt || (initialContent ? guessExtFromContent(initialContent) : null);
-  const safeExt = ext === "css" || ext === "js" ? ext : null;
+  const safeExt = ext === "css" || ext === "js" || ext === "html" ? ext : null;
   const name = autoName(state.files, safeExt);
   state.files[name] = initialContent;
   state.autoNamed.add(name);
@@ -578,7 +651,7 @@ function relabelIfAuto() {
   const content = state.files[cur] || "";
   if (!content.trim()) return;
   const detected = guessExtFromContent(content);
-  if (detected !== "css" && detected !== "js") return;
+  if (detected !== "css" && detected !== "js" && detected !== "html") return;
   if (getExt(cur) === detected) return;
 
   // Pretend current file isn't there so autoName picks a fresh one for this ext
@@ -604,8 +677,19 @@ filePicker.addEventListener("change", async () => {
     const text = await readFileText(f);
     const ext = getExt(f.name);
     if (ext === "html" || ext === "htm") {
-      state.files["index.html"] = text;
-      state.active = "index.html";
+      const cleanBase = sanitizeFileName(f.name).replace(/\.htm$/i, ".html");
+      if (cleanBase.toLowerCase() === "index.html") {
+        state.files["index.html"] = text;
+        state.active = "index.html";
+      } else {
+        if (!state.files.hasOwnProperty(cleanBase) &&
+            Object.keys(state.files).length >= LIMITS.maxFilesPerSite) {
+          setMsg(modalMsg, `Max ${LIMITS.maxFilesPerSite} filer per sida.`, "err");
+          continue;
+        }
+        state.files[cleanBase] = text;
+        state.active = cleanBase;
+      }
     } else if (ext === "js" || ext === "css") {
       const clean = sanitizeFileName(f.name);
       if (state.files.hasOwnProperty(clean)) {
