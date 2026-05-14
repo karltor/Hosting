@@ -14,7 +14,7 @@
 </head>
 <body>
   <div id="status">Laddar…</div>
-  <iframe id="frame" hidden sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
+  <iframe id="frame" hidden sandbox="allow-scripts allow-forms allow-modals"></iframe>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
@@ -35,8 +35,23 @@
 
     const FAVICON = "data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Crect%20width%3D'64'%20height%3D'64'%20rx%3D'14'%20fill%3D'%232563eb'%2F%3E%3Cpath%20d%3D'M14%2046V18h6l8%2014%208-14h6v28h-6V30l-6%2010h-4l-6-10v16z'%20fill%3D'white'%2F%3E%3C%2Fsvg%3E";
 
+    // Injected into every rendered page: redirect navigation to parent via postMessage
+    const NAV_SCRIPT =
+      "(function(){window.__mvgo=function(u){if(!u)return;" +
+      "if(/^([a-z]+:)?\\/\\//i.test(u))return;if(u.charAt(0)==='#'||u.indexOf('javascript:')===0)return;" +
+      "parent.postMessage({type:'mv-nav',url:u},'*')};" +
+      "document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');" +
+      "if(!a)return;var h=a.getAttribute('href');if(!h||/^([a-z]+:)?\\/\\//i.test(h)||h.charAt(0)==='#'||h.indexOf('javascript:')===0)return;" +
+      "e.preventDefault();window.__mvgo(h)},true);" +
+      "document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM')return;" +
+      "var a=f.getAttribute('action');if(!a||/^([a-z]+:)?\\/\\//i.test(a))return;e.preventDefault();window.__mvgo(a)},true);" +
+      "})();";
+
     const status = document.getElementById("status");
     const frame = document.getElementById("frame");
+
+    let allFiles = null;
+    let siteName = "";
 
     function showError(text) {
       status.innerHTML = "";
@@ -49,9 +64,9 @@
       frame.hidden = true;
     }
 
-    function buildSrcDoc(files) {
-      const html = files["index.html"];
-      if (!html) throw new Error("index.html saknas.");
+    function buildSrcDoc(files, entryPage) {
+      const html = files[entryPage];
+      if (!html) throw new Error(entryPage + " saknas.");
 
       const parser = new DOMParser();
       const docp = parser.parseFromString(html, "text/html");
@@ -81,6 +96,26 @@
         }
       });
 
+      // Rewrite navigation patterns in inline scripts and on*-attributes so
+      // window.location.href='x.html' etc. routes through __mvgo (postMessage)
+      // instead of triggering a real navigation that the iframe sandbox blocks.
+      docp.querySelectorAll("script:not([src])").forEach((el) => {
+        el.textContent = rewriteLocationCalls(el.textContent);
+      });
+      docp.querySelectorAll("*").forEach((el) => {
+        for (const attr of [...el.attributes]) {
+          if (!attr.name.startsWith("on")) continue;
+          const v = rewriteLocationCalls(attr.value);
+          if (v !== attr.value) el.setAttribute(attr.name, v);
+        }
+      });
+
+      // Inject navigation helper at the very top of <head> so it runs before
+      // any page script tries to navigate.
+      const nav = docp.createElement("script");
+      nav.textContent = NAV_SCRIPT;
+      docp.head?.prepend(nav);
+
       // Inject favicon if the page has none
       if (!docp.querySelector('link[rel~="icon"]')) {
         const ic = docp.createElement("link");
@@ -92,29 +127,60 @@
       return "<!DOCTYPE html>\n" + docp.documentElement.outerHTML;
     }
 
+    function rewriteLocationCalls(src) {
+      return src
+        .replace(/\b(?:(?:window|document|self|top)\.)?location\.href\s*=\s*(['"`])([^'"`]+)\1/g,
+                 "__mvgo($1$2$1)")
+        .replace(/\b(?:window|document|self|top)\.location\s*=\s*(['"`])([^'"`]+)\1/g,
+                 "__mvgo($1$2$1)")
+        .replace(/\b(?:(?:window|document|self|top)\.)?location\s*\.\s*(?:assign|replace)\s*\(\s*(['"`])([^'"`]+)\1\s*\)/g,
+                 "__mvgo($1$2$1)");
+    }
+
     function matchFile(ref, files) {
       if (!ref) return null;
-      // Ignore absolute URLs
       if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
-      // Strip leading ./ or /
       let clean = ref.replace(/^\.?\//, "");
-      // Strip query/hash
       clean = clean.split("?")[0].split("#")[0];
       if (files[clean]) return clean;
-      // Try basename match
       const base = clean.split("/").pop();
       if (files[base]) return base;
       return null;
+    }
+
+    function normalizeRef(ref) {
+      if (!ref) return null;
+      if (/^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("blob:")) return null;
+      return ref.replace(/^\.?\//, "").split("?")[0].split("#")[0];
+    }
+
+    function renderPage(page) {
+      if (!allFiles) return;
+      const target = allFiles[page] ? page : (allFiles[page.split("/").pop()] ? page.split("/").pop() : null);
+      if (!target) {
+        showError("Sidan '" + page + "' hittades inte i den här webbplatsen.");
+        return;
+      }
+      try {
+        const srcdoc = buildSrcDoc(allFiles, target);
+        frame.srcdoc = srcdoc;
+        frame.hidden = false;
+        status.hidden = true;
+      } catch (err) {
+        showError("Kunde inte rendera sidan: " + err.message);
+      }
     }
 
     async function load() {
       const id = location.hash.replace(/^#/, "").trim();
       if (!id) return showError("Ingen sid-ID angiven.");
 
-      // Try fresh cache first – stops F5-spam from hammering Firestore
       const cached = readCache(id);
       if (cached) {
-        render(cached);
+        allFiles = cached.files;
+        siteName = cached.name || "";
+        document.title = siteName ? siteName + " – Mini-Värd" : "Mini-Värd – sida";
+        renderPage("index.html");
         return;
       }
 
@@ -123,19 +189,22 @@
         if (!snap.exists()) return showError("Sidan hittades inte (ID: " + id + ").");
         const data = snap.data();
         writeCache(id, { name: data.name, files: data.files || {} });
-        render(data);
+        allFiles = data.files || {};
+        siteName = data.name || "";
+        document.title = siteName ? siteName + " – Mini-Värd" : "Mini-Värd – sida";
+        renderPage("index.html");
       } catch (err) {
         showError("Kunde inte ladda sidan: " + err.message);
       }
     }
 
-    function render(data) {
-      const srcdoc = buildSrcDoc(data.files || {});
-      document.title = data.name ? data.name + " – Mini-Värd" : "Mini-Värd – sida";
-      frame.srcdoc = srcdoc;
-      frame.hidden = false;
-      status.hidden = true;
-    }
+    // Receive navigation requests from sandboxed iframe
+    window.addEventListener("message", (e) => {
+      if (!e.data || e.data.type !== "mv-nav") return;
+      const target = normalizeRef(e.data.url);
+      if (!target) return;
+      renderPage(target);
+    });
 
     // --- Viewer cache (5 min TTL) ---
     const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -154,7 +223,7 @@
         localStorage.setItem(cacheKey(id), JSON.stringify({
           name: data.name, files: data.files, ts: Date.now(),
         }));
-      } catch { /* quota or disabled – ignore */ }
+      } catch {}
     }
 
     window.addEventListener("hashchange", load);
