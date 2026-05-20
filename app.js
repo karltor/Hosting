@@ -55,6 +55,9 @@ const editorArea = document.getElementById("editorArea");
 const fileTabs = document.getElementById("fileTabs");
 const addFileBtn = document.getElementById("addFileBtn");
 const filePicker = document.getElementById("filePicker");
+const btnCopy = document.getElementById("btnCopy");
+const btnPaste = document.getElementById("btnPaste");
+const btnSelectAll = document.getElementById("btnSelectAll");
 
 let currentUser = null;
 
@@ -109,6 +112,32 @@ function getExt(name) {
 
 function sanitizeFileName(name) {
   return name.replace(/[^\w.\-]/g, "_");
+}
+
+// Pull a name out of the <title> of an HTML string, decoding entities.
+function extractTitle(html) {
+  if (!html) return "";
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!m) return "";
+  const tmp = document.createElement("textarea");
+  tmp.innerHTML = m[1];
+  return tmp.value.replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+// Briefly blink the site-name field red to draw attention to it.
+function flashNameField() {
+  modalSiteName.classList.remove("flash-err");
+  void modalSiteName.offsetWidth; // restart the animation
+  modalSiteName.classList.add("flash-err");
+  setTimeout(() => modalSiteName.classList.remove("flash-err"), 1100);
+}
+
+function insertAtCursor(ta, text) {
+  const s = ta.selectionStart ?? ta.value.length;
+  const e = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+  const pos = s + text.length;
+  ta.setSelectionRange(pos, pos);
 }
 
 function sortFileNames(files) {
@@ -475,7 +504,10 @@ async function openModalNew() {
   selectFile("index.html");
   setMsg(modalMsg, "");
   siteModal.hidden = false;
-  setTimeout(() => modalSiteName.focus(), 50);
+  setTimeout(() => {
+    editorArea.focus();
+    editorArea.setSelectionRange(0, 0);
+  }, 50);
 }
 
 function openModalEdit(site) {
@@ -718,8 +750,22 @@ async function saveModal() {
   if (!currentUser) { setMsg(modalMsg, "Inte inloggad.", "err"); return; }
   syncActive();
 
-  const name = modalSiteName.value.trim();
-  if (!name) { setMsg(modalMsg, "Ge sidan ett namn först.", "err"); modalSiteName.focus(); return; }
+  let name = modalSiteName.value.trim();
+  // For new pages without a name, try the <title> of index.html.
+  // When editing we never touch an existing name.
+  if (!name && state.mode === "new") {
+    const fromTitle = extractTitle(state.files["index.html"]);
+    if (fromTitle) {
+      name = fromTitle;
+      modalSiteName.value = name;
+    }
+  }
+  if (!name) {
+    setMsg(modalMsg, "Ge sidan ett namn först.", "err");
+    modalSiteName.focus();
+    flashNameField();
+    return;
+  }
 
   if (!state.files["index.html"] || !state.files["index.html"].trim()) {
     setMsg(modalMsg, "index.html är tom.", "err");
@@ -789,6 +835,38 @@ editorArea.addEventListener("input", () => {
   if (!state || !state.active) return;
   state.files[state.active] = editorArea.value;
   scheduleRelabel();
+});
+
+// Editor toolbar: select all / copy / paste act on the code box
+btnSelectAll.addEventListener("click", () => {
+  editorArea.focus();
+  editorArea.select();
+});
+
+btnCopy.addEventListener("click", async () => {
+  editorArea.focus();
+  const sel = editorArea.value.slice(editorArea.selectionStart, editorArea.selectionEnd);
+  const text = sel || editorArea.value;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    editorArea.select();
+    document.execCommand("copy");
+  }
+});
+
+btnPaste.addEventListener("click", async () => {
+  editorArea.focus();
+  try {
+    const text = await navigator.clipboard.readText();
+    insertAtCursor(editorArea, text);
+    if (state && state.active) {
+      state.files[state.active] = editorArea.value;
+      scheduleRelabel();
+    }
+  } catch {
+    setMsg(modalMsg, "Kunde inte klistra in automatiskt – tryck Ctrl+V i rutan.", "err");
+  }
 });
 
 // Close on backdrop click
