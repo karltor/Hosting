@@ -129,6 +129,18 @@ function extractTitle(html) {
   return tmp.value.replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
+// Strip text that wraps a complete HTML document — e.g. LLM chatter like
+// "Javisst, här kommer koden:" / "Testa att spara filen…" and markdown ```
+// fences pasted around <!DOCTYPE>…</html>. Returns the document slice when a
+// full one is found, otherwise the original text unchanged.
+function stripNonHtml(text) {
+  if (!text) return text;
+  const start = text.match(/<!doctype\s+html|<html[\s>]/i);
+  const endIdx = text.toLowerCase().lastIndexOf("</html>");
+  if (!start || endIdx === -1 || endIdx < start.index) return text;
+  return text.slice(start.index, endIdx + "</html>".length).trim() + "\n";
+}
+
 // Briefly blink the site-name field red to draw attention to it.
 function flashNameField() {
   modalSiteName.classList.remove("flash-err");
@@ -787,6 +799,14 @@ async function saveModal() {
   if (!state) return;
   if (!currentUser) { setMsg(modalMsg, "Inte inloggad.", "err"); return; }
   syncActive();
+
+  // Trim LLM chatter / markdown fences pasted around full HTML documents.
+  for (const n of Object.keys(state.files)) {
+    if (getExt(n) === "html") state.files[n] = stripNonHtml(state.files[n]);
+  }
+  if (state.active && getExt(state.active) === "html") {
+    editorArea.value = state.files[state.active] ?? "";
+  }
 
   let name = modalSiteName.value.trim();
   // For new pages without a name, try the <title> of index.html.
