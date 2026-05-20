@@ -8,6 +8,7 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -66,6 +67,10 @@ let currentUser = null;
 let state = null;
 
 // --- Auth ---
+// Paint cached sites immediately so the list isn't blank while auth and the
+// first Firestore query are in flight.
+paintFromCache();
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     try {
@@ -394,84 +399,117 @@ function updateSiteCount(n) {
     : "";
 }
 
-async function refreshSites() {
+// Build one site card. `s` may be a full Firestore doc (with .files) or a
+// lightweight cache entry ({id, name}); in the latter case Edit fetches the
+// full doc on demand.
+function buildSiteItem(s) {
+  const li = document.createElement("li");
+  const url = shareUrlFor(s.id);
+
+  const meta = document.createElement("div");
+  meta.className = "site-info";
+  const nameEl = document.createElement("div");
+  nameEl.className = "site-name";
+  nameEl.textContent = s.name;
+  meta.append(nameEl);
+
+  const actions = document.createElement("div");
+  actions.className = "site-actions";
+
+  const openBtn = document.createElement("button");
+  openBtn.textContent = "Öppna";
+  openBtn.addEventListener("click", () => window.open(url, "_blank", "noopener"));
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "secondary";
+  copyBtn.textContent = "Kopiera";
+  copyBtn.title = "Kopiera delningslänk";
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = "Kopierad!";
+      setTimeout(() => (copyBtn.textContent = "Kopiera"), 1500);
+    } catch { copyBtn.textContent = "Misslyckades"; }
+  });
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "secondary";
+  editBtn.textContent = "Redigera";
+  editBtn.addEventListener("click", async () => {
+    let site = s;
+    if (!site.files) {
+      editBtn.disabled = true;
+      try {
+        const snap = await getDoc(doc(db, "sites", s.id));
+        if (!snap.exists()) {
+          await confirmDialog({ title: "Fel", message: "Sidan kunde inte hämtas.", confirmText: "OK", cancelText: "" });
+          return;
+        }
+        site = { id: snap.id, ...snap.data() };
+      } catch (err) {
+        await confirmDialog({ title: "Fel", message: "Kunde inte hämta sidan: " + err.message, confirmText: "OK", cancelText: "" });
+        return;
+      } finally {
+        editBtn.disabled = false;
+      }
+    }
+    openModalEdit(site);
+  });
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "danger";
+  delBtn.textContent = "Ta bort";
+  delBtn.addEventListener("click", async () => {
+    const ok = await confirmDialog({
+      title: "Ta bort sida",
+      message: `Vill du verkligen ta bort "${s.name}"? Detta går inte att ångra.`,
+      confirmText: "Ta bort",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, "sites", s.id));
+      cacheRemove(s.id);
+      invalidateViewCache(s.id);
+      await refreshSites();
+    } catch (err) {
+      await confirmDialog({ title: "Fel", message: "Kunde inte ta bort: " + err.message, confirmText: "OK", cancelText: "" });
+    }
+  });
+
+  actions.append(openBtn, copyBtn, editBtn, delBtn);
+  li.append(meta, actions);
+  return li;
+}
+
+function renderSites(sites) {
   sitesList.innerHTML = "";
+  updateSiteCount(sites.length);
+  sitesEmpty.hidden = sites.length !== 0;
+  for (const s of sites) sitesList.append(buildSiteItem(s));
+}
+
+// Instant paint from the local cache so returning users see their sites
+// without waiting for auth + the Firestore round-trip. Refreshed shortly
+// after by refreshSites(). Skipped when the cache is empty to avoid
+// flashing the onboarding panel before the real data arrives.
+function paintFromCache() {
+  const cached = cacheGet();
+  if (cached.length) renderSites(cached);
+}
+
+async function refreshSites() {
   let sites;
   try {
     sites = await listUserSites();
   } catch (err) {
-    sitesList.innerHTML = `<li class="empty">Kunde inte ladda: ${err.message}</li>`;
+    if (!sitesList.children.length) {
+      sitesList.innerHTML = `<li class="empty">Kunde inte ladda: ${err.message}</li>`;
+    }
     return;
   }
   cacheSet(sites.map((s) => ({ id: s.id, name: s.name, updatedAt: Date.now() })));
-  updateSiteCount(sites.length);
-
-  if (sites.length === 0) {
-    sitesEmpty.hidden = false;
-    return;
-  }
-  sitesEmpty.hidden = true;
-
-  for (const s of sites) {
-    const li = document.createElement("li");
-    const url = shareUrlFor(s.id);
-
-    const meta = document.createElement("div");
-    meta.className = "site-info";
-    const nameEl = document.createElement("div");
-    nameEl.className = "site-name";
-    nameEl.textContent = s.name;
-    meta.append(nameEl);
-
-    const actions = document.createElement("div");
-    actions.className = "site-actions";
-
-    const openBtn = document.createElement("button");
-    openBtn.textContent = "Öppna";
-    openBtn.addEventListener("click", () => window.open(url, "_blank", "noopener"));
-
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "secondary";
-    copyBtn.textContent = "Kopiera";
-    copyBtn.title = "Kopiera delningslänk";
-    copyBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(url);
-        copyBtn.textContent = "Kopierad!";
-        setTimeout(() => (copyBtn.textContent = "Kopiera"), 1500);
-      } catch { copyBtn.textContent = "Misslyckades"; }
-    });
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "secondary";
-    editBtn.textContent = "Redigera";
-    editBtn.addEventListener("click", () => openModalEdit(s));
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "danger";
-    delBtn.textContent = "Ta bort";
-    delBtn.addEventListener("click", async () => {
-      const ok = await confirmDialog({
-        title: "Ta bort sida",
-        message: `Vill du verkligen ta bort "${s.name}"? Detta går inte att ångra.`,
-        confirmText: "Ta bort",
-        danger: true,
-      });
-      if (!ok) return;
-      try {
-        await deleteDoc(doc(db, "sites", s.id));
-        cacheRemove(s.id);
-        invalidateViewCache(s.id);
-        await refreshSites();
-      } catch (err) {
-        await confirmDialog({ title: "Fel", message: "Kunde inte ta bort: " + err.message, confirmText: "OK", cancelText: "" });
-      }
-    });
-
-    actions.append(openBtn, copyBtn, editBtn, delBtn);
-    li.append(meta, actions);
-    sitesList.append(li);
-  }
+  renderSites(sites);
 }
 
 // --- Modal ---
