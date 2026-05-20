@@ -211,13 +211,38 @@ button.danger:hover { background: var(--danger-hover); }
   border-bottom: 1px solid var(--border);
 }
 .modal-head input[type=text] {
-  flex: 1;
+  flex: 0 1 360px;
+  min-width: 140px;
   font-size: 1rem;
   font-weight: 600;
   border: 0;
   padding: 4px 6px;
 }
 .modal-head input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-radius: 4px; }
+
+.editor-tools {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.editor-tools button {
+  padding: 6px 12px;
+  font-size: .85rem;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .editor-tools button { padding: 6px 8px; font-size: .78rem; }
+}
+
+@keyframes flashErr {
+  0%   { background: #fff;     box-shadow: none; }
+  50%  { background: #fee2e2;  box-shadow: 0 0 0 2px var(--danger); }
+  100% { background: #fff;     box-shadow: none; }
+}
+.modal-head input.flash-err {
+  border-radius: 4px;
+  animation: flashErr .35s ease 3;
+}
 
 .editor-body {
   flex: 1;
