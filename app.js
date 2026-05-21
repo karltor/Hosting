@@ -282,29 +282,86 @@ function autoFixRefs(files) {
 }
 
 function guessExtFromContent(content) {
-  const c = content.trim();
-  if (!c) return null;
-  if (/^<!doctype/i.test(c) || /^<html/i.test(c) || /<body[\s>]/i.test(c)) return "html";
+  return scoreContent(content).ext;
+}
 
-  // JS keyword signals - both-sided word boundaries to avoid matching
-  // CSS terms like "letter-spacing" (was caught by \blet) or "variable" (\bvar).
-  if (/\b(function|const|let|var|return|class|import|export|typeof|new)\b/.test(c)) {
-    return "js";
-  }
-  // Other strong JS signals
-  if (/=>|console\.|document\.|window\.|\.querySelector|\.addEventListener/.test(c)) {
-    return "js";
+// Evidence-weighted classifier for pasted snippets (html / css / js).
+//
+// The old version returned on the first matching signal, which misfired on
+// tokens shared across languages — most painfully CSS's `var(--x)` tripping the
+// JS `var` keyword, so whole stylesheets were labelled .js. Instead we tally
+// several weighted, occurrence-capped signals per language and let the strongest
+// win. `var` is the canonical ambiguity and is split by context: `var(` scores
+// CSS while `var name =` scores JS.
+//
+// Returns { ext, scores, confidence } so the relabel logic (and tests) can see
+// *why* a snippet was classified the way it was; confidence is the winner's
+// share of all evidence (0–1).
+function scoreContent(content) {
+  const c = (content || "").trim();
+  if (!c) return { ext: null, scores: { html: 0, css: 0, js: 0 }, confidence: 0 };
+
+  // A snippet that *starts* with a full-document marker is unambiguously HTML
+  // (these can't open a CSS/JS file), so settle it outright. Stray </html> or
+  // <body> deeper in the text is left to scoring — they routinely appear inside
+  // JS strings and must not outvote hundreds of real JS signals.
+  if (/^<!doctype\s+html/i.test(c) || /^<html[\s>]/i.test(c)) {
+    return { ext: "html", scores: { html: 1, css: 0, js: 0 }, confidence: 1 };
   }
 
-  // CSS selector + declaration block
-  if (/[#.@:\w*][\w\-,>+~*\s:()."'\[\]=]*\{\s*[a-z-]+\s*:\s*[^;{}]+;/i.test(c)) {
-    return "css";
+  const tally = (signals) =>
+    signals.reduce((sum, [re, weight, cap = 3]) => {
+      const n = (c.match(re) || []).length;
+      return sum + Math.min(n, cap) * weight;
+    }, 0);
+
+  const html = tally([
+    [/<!doctype\s+html/gi, 4, 1],
+    [/<\/(?:html|head|body|div|span|p|ul|ol|li|a|table|tr|td|th|section|header|footer|nav|main|article|aside|button|form|label|h[1-6])>/gi, 1, 8],
+    [/<(?:html|head|body|div|span|ul|ol|li|table|tr|td|th|section|header|footer|nav|main|article|aside|button|form|label|img|input|meta|link|script|style|title|h[1-6])\b[^>]*>/gi, 1, 8],
+    [/\s(?:class|id|href|src|alt|type|rel|name|value|placeholder|aria-[\w-]+)\s*=\s*["']/gi, 1, 6],
+    [/&(?:amp|lt|gt|quot|nbsp|#\d+);/gi, 1, 3],
+  ]);
+
+  const css = tally([
+    [/--[a-z][\w-]*\s*:/gi, 2, 6],                                            // custom property declaration
+    [/\bvar\(\s*--/gi, 2, 6],                                                  // var(--x) usage
+    [/@(?:media|keyframes|import|font-face|supports|charset|page|namespace)\b/gi, 3, 4],
+    [/[#.*:\w][\w\-,>+~*\s:()."'\[\]=]*\{\s*[a-z-]+\s*:\s*[^;{}]+;/gi, 2, 5],   // selector { prop: value; }
+    [/(?:^|[{;]\s*)(?:color|background|margin|padding|border|display|position|font|width|height|flex|grid|gap|box-shadow|text-align|line-height|opacity|z-index|overflow|cursor|transition|transform)[\w-]*\s*:/gim, 1, 8],
+    [/#[0-9a-f]{3,8}\b/gi, 1, 5],                                             // hex colours
+    [/\b\d+(?:\.\d+)?(?:px|rem|em|vh|vw|vmin|vmax|pt|ch|ex)\b/gi, 1, 6],       // CSS units
+    [/!important/gi, 2, 2],
+    [/:(?:root|hover|focus|active|before|after|nth-child|not|disabled|empty|checked)\b/gi, 1, 5],
+  ]);
+
+  const js = tally([
+    [/\bfunction\b/g, 3, 5],
+    [/=>/g, 2, 6],
+    [/\b(?:const|let)\s+[\w$]/g, 2, 6],
+    [/\bvar\s+[\w$]+\s*=/g, 3, 4],                                            // JS `var x =`, not CSS var(
+    [/\b(?:console|document|window|Math|JSON|Object|Array|Promise|localStorage)\s*\./g, 2, 5],
+    [/\.(?:querySelector(?:All)?|addEventListener|getElementById|getElementsBy\w+|appendChild|createElement|setAttribute|classList|textContent)\b/g, 2, 5],
+    [/(?<!@)\bimport\s+[\w{*'"]|(?<!@)\bimport\s*\(|\bexport\s+(?:default|const|let|var|function|class|\{|\*)/g, 3, 3], // ES modules (not CSS @import)
+    [/\bclass\s+[A-Za-z_$][\w$]*/g, 2, 3],
+    [/===|!==/g, 2, 4],
+    [/\breturn\b/g, 1, 4],
+    [/\b(?:typeof|instanceof)\b|\bnew\s+[A-Z]/g, 2, 3],
+  ]);
+
+  const scores = { html, css, js };
+  const total = html + css + js;
+  // No evidence → js (legacy default for unrecognised pastes). On a tie we
+  // prefer css then html over js, since distinctive JS tokens (function, =>,
+  // const) rarely tie when the snippet is really JS.
+  let ext = "js";
+  if (total > 0) {
+    if (css >= js && css >= html) ext = "css";
+    else if (html >= js && html >= css) ext = "html";
+    else ext = "js";
   }
-  // @-rules
-  if (/^\s*@(media|keyframes|import|font-face|supports|charset|page)\b/im.test(c)) {
-    return "css";
-  }
-  return "js";
+  const confidence = total === 0 ? 0 : Math.max(html, css, js) / total;
+  return { ext, scores, confidence };
 }
 
 function autoName(existing, ext = null) {
@@ -732,9 +789,12 @@ function relabelIfAuto() {
   if (!state.autoNamed.has(cur)) return;
   const content = state.files[cur] || "";
   if (!content.trim()) return;
-  const detected = guessExtFromContent(content);
+  const { ext: detected, confidence } = scoreContent(content);
   if (detected !== "css" && detected !== "js" && detected !== "html") return;
   if (getExt(cur) === detected) return;
+  // Only auto-rename on a decisive signal so half-typed or genuinely mixed
+  // snippets don't flip the tab's type back and forth while the user types.
+  if (confidence < 0.6) return;
 
   // Pretend current file isn't there so autoName picks a fresh one for this ext
   const without = { ...state.files };
