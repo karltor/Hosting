@@ -47,11 +47,54 @@
       "var a=f.getAttribute('action');if(!a||/^([a-z]+:)?\\/\\//i.test(a))return;e.preventDefault();window.__mvgo(a)},true);" +
       "})();";
 
+    // The iframe is sandboxed without allow-same-origin (for security) which
+    // means native localStorage/sessionStorage throw SecurityError. We inject
+    // a synchronous in-memory shim that persists to the parent via postMessage.
+    // Parent stores per-siteId data in its own localStorage under LS_GUEST_PREFIX.
+    const LS_GUEST_PREFIX = "miniVard.guestls.";
+    const LS_GUEST_MAX_BYTES = 200 * 1024; // cap per-site to avoid filling parent storage
+
+    function buildStorageScript(initialJson) {
+      return (
+        "(function(){var data=" + initialJson + "||{};" +
+        "function persist(){try{parent.postMessage({type:'mv-ls',data:data},'*');}catch(_){}}" +
+        "var fake={" +
+          "getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(data,k)?String(data[k]):null;}," +
+          "setItem:function(k,v){data[String(k)]=String(v);persist();}," +
+          "removeItem:function(k){delete data[String(k)];persist();}," +
+          "clear:function(){for(var k in data)if(Object.prototype.hasOwnProperty.call(data,k))delete data[k];persist();}," +
+          "key:function(i){var ks=Object.keys(data);return i>=0&&i<ks.length?ks[i]:null;}" +
+        "};" +
+        "Object.defineProperty(fake,'length',{get:function(){return Object.keys(data).length;}});" +
+        "try{Object.defineProperty(window,'localStorage',{value:fake,configurable:true});}catch(_){}" +
+        "try{Object.defineProperty(window,'sessionStorage',{value:fake,configurable:true});}catch(_){}" +
+        "})();"
+      );
+    }
+
+    function guestStorageKey(id) { return LS_GUEST_PREFIX + id; }
+    function readGuestStorage(id) {
+      try {
+        const raw = localStorage.getItem(guestStorageKey(id));
+        if (!raw) return {};
+        const obj = JSON.parse(raw);
+        return obj && typeof obj === "object" ? obj : {};
+      } catch { return {}; }
+    }
+    function writeGuestStorage(id, data) {
+      try {
+        const json = JSON.stringify(data || {});
+        if (json.length > LS_GUEST_MAX_BYTES) return; // silently drop oversize writes
+        localStorage.setItem(guestStorageKey(id), json);
+      } catch {}
+    }
+
     const status = document.getElementById("status");
     const frame = document.getElementById("frame");
 
     let allFiles = null;
     let siteName = "";
+    let currentSiteId = "";
 
     function showError(text) {
       status.innerHTML = "";
@@ -116,6 +159,13 @@
       nav.textContent = NAV_SCRIPT;
       docp.head?.prepend(nav);
 
+      // Inject localStorage shim (must run before any user script). Pre-load
+      // with previously persisted data for this site so reads are synchronous.
+      const initial = JSON.stringify(readGuestStorage(currentSiteId || ""));
+      const storage = docp.createElement("script");
+      storage.textContent = buildStorageScript(initial);
+      docp.head?.prepend(storage);
+
       // Inject favicon if the page has none
       if (!docp.querySelector('link[rel~="icon"]')) {
         const ic = docp.createElement("link");
@@ -174,6 +224,7 @@
     async function load() {
       const id = location.hash.replace(/^#/, "").trim();
       if (!id) return showError("Ingen sid-ID angiven.");
+      currentSiteId = id;
 
       const cached = readCache(id);
       if (cached) {
@@ -200,10 +251,19 @@
 
     // Receive navigation requests from sandboxed iframe
     window.addEventListener("message", (e) => {
-      if (!e.data || e.data.type !== "mv-nav") return;
-      const target = normalizeRef(e.data.url);
-      if (!target) return;
-      renderPage(target);
+      if (!e.data) return;
+      if (e.data.type === "mv-nav") {
+        const target = normalizeRef(e.data.url);
+        if (!target) return;
+        renderPage(target);
+        return;
+      }
+      if (e.data.type === "mv-ls") {
+        if (!currentSiteId) return;
+        const obj = (e.data.data && typeof e.data.data === "object") ? e.data.data : {};
+        writeGuestStorage(currentSiteId, obj);
+        return;
+      }
     });
 
     // --- Viewer cache (5 min TTL) ---
