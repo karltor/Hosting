@@ -22,9 +22,24 @@
         🚫 Du är bannlyst från att publicera på leaderboard. Kontakta admin.
       </div>
 
-      <ul id="boardList" class="board-list">
-        <li class="empty">Laddar…</li>
-      </ul>
+      <div id="boardWrap" class="board-wrap">
+        <table class="board-table">
+          <thead>
+            <tr>
+              <th class="col-rank">#</th>
+              <th class="col-name">Sida</th>
+              <th class="col-author">Författare</th>
+              <th class="col-desc">Beskrivning</th>
+              <th class="col-rating">Betyg</th>
+              <th class="col-avg">Snitt</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="boardTbody">
+            <tr><td colspan="7" class="empty">Laddar…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 
