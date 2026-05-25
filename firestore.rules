@@ -2,6 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == "karl.tornered@nyamunken.se"
+        && request.auth.token.email_verified == true;
+    }
+    function isBanned() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/banned/$(request.auth.uid));
+    }
+
     // Hosted mini-sites. Anyone can read (public sharing).
     // Only the authenticated owner can create/update/delete their own.
     match /sites/{siteId} {
@@ -26,8 +36,67 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && validSite(request.resource.data);
 
-      allow delete: if request.auth != null
-        && resource.data.ownerUid == request.auth.uid;
+      allow delete: if (request.auth != null && resource.data.ownerUid == request.auth.uid)
+        || isAdmin();
+
+      // Version snapshots created on each save. Owner can read/create/delete; never updated.
+      match /versions/{vid} {
+        function siteOwner() {
+          return get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid;
+        }
+        allow read: if request.auth != null && siteOwner() == request.auth.uid;
+        allow create: if request.auth != null
+          && siteOwner() == request.auth.uid
+          && request.resource.data.files is map
+          && request.resource.data.sizeBytes is int
+          && request.resource.data.sizeBytes <= 512000;
+        allow delete: if request.auth != null && siteOwner() == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    // Leaderboard: published references to user sites with author info, ratings, optional description.
+    match /published/{pid} {
+      allow read: if true;
+
+      allow create: if request.auth != null && !isBanned()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.siteId is string
+        && request.resource.data.siteId.size() <= 64
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.authorName.size() <= 60
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 280
+        && request.resource.data.siteName is string
+        && request.resource.data.siteName.size() <= 80;
+
+      allow update: if (request.auth != null
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && !isBanned())
+        || isAdmin();
+
+      allow delete: if (request.auth != null && resource.data.ownerUid == request.auth.uid)
+        || isAdmin();
+
+      match /ratings/{uid} {
+        allow read: if true;
+        allow create, update: if request.auth != null
+          && request.auth.uid == uid
+          && !isBanned()
+          && request.resource.data.value is int
+          && request.resource.data.value >= 1
+          && request.resource.data.value <= 5;
+        allow delete: if (request.auth != null && request.auth.uid == uid)
+          || isAdmin();
+      }
+    }
+
+    // Banned users: keyed by uid. Only admin manages.
+    match /banned/{uid} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
   }
 }

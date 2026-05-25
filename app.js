@@ -10,10 +10,13 @@ import {
   doc,
   getDoc,
   setDoc,
+  addDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
+  orderBy,
+  limit,
   getDocs,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
@@ -59,6 +62,7 @@ const filePicker = document.getElementById("filePicker");
 const btnCopy = document.getElementById("btnCopy");
 const btnPaste = document.getElementById("btnPaste");
 const btnSelectAll = document.getElementById("btnSelectAll");
+const btnHistory = document.getElementById("btnHistory");
 
 let currentUser = null;
 
@@ -611,6 +615,7 @@ async function openModalNew() {
   selectFile("index.html");
   setMsg(modalMsg, "");
   siteModal.hidden = false;
+  if (btnHistory) btnHistory.hidden = true;
   setTimeout(() => {
     editorArea.focus();
     editorArea.setSelectionRange(0, 0);
@@ -632,6 +637,7 @@ function openModalEdit(site) {
   selectFile(Object.keys(state.files)[0] || "index.html");
   setMsg(modalMsg, "");
   siteModal.hidden = false;
+  if (btnHistory) btnHistory.hidden = false;
 }
 
 function closeModal() {
@@ -926,6 +932,12 @@ async function saveModal() {
         updatedAt: serverTimestamp(),
       });
       cacheAdd({ id, name, updatedAt: Date.now() });
+      // Initial version snapshot (best-effort; ignore failure)
+      try {
+        await addDoc(collection(db, "sites", id, "versions"), {
+          name, files: state.files, sizeBytes: total, savedAt: serverTimestamp(),
+        });
+      } catch (_) {}
     } else {
       await updateDoc(doc(db, "sites", state.id), {
         name,
@@ -934,6 +946,11 @@ async function saveModal() {
         updatedAt: serverTimestamp(),
       });
       invalidateViewCache(state.id);
+      try {
+        await addDoc(collection(db, "sites", state.id, "versions"), {
+          name, files: state.files, sizeBytes: total, savedAt: serverTimestamp(),
+        });
+      } catch (_) {}
     }
     closeModal();
     await refreshSites();
@@ -986,6 +1003,97 @@ btnPaste.addEventListener("click", async () => {
     setMsg(modalMsg, "Kunde inte klistra in automatiskt – tryck Ctrl+V i rutan.", "err");
   }
 });
+
+// --- Version history ---
+async function openHistory() {
+  if (!state || state.mode !== "edit" || !state.id) return;
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay confirm-overlay";
+  const box = document.createElement("div");
+  box.className = "history-box";
+  const h = document.createElement("h3");
+  h.textContent = "Versionshistorik";
+  const sub = document.createElement("p");
+  sub.className = "history-sub";
+  sub.textContent = "Klicka Återställ för att ladda en tidigare version i editorn. Spara sedan för att göra den till aktuell version.";
+  const list = document.createElement("div");
+  list.className = "history-list";
+  list.textContent = "Laddar…";
+  const actions = document.createElement("div");
+  actions.className = "confirm-actions";
+  const close = document.createElement("button");
+  close.className = "secondary";
+  close.textContent = "Stäng";
+  actions.append(close);
+  box.append(h, sub, list, actions);
+  overlay.append(box);
+  document.body.append(overlay);
+
+  const closeFn = () => overlay.remove();
+  close.addEventListener("click", closeFn);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeFn(); });
+
+  try {
+    const q = query(
+      collection(db, "sites", state.id, "versions"),
+      orderBy("savedAt", "desc"),
+      limit(30),
+    );
+    const snap = await getDocs(q);
+    list.innerHTML = "";
+    if (snap.empty) {
+      list.innerHTML = '<p class="empty">Inga sparade versioner än. Varje gång du klickar "Spara ändringar" skapas en version här.</p>';
+      return;
+    }
+    snap.forEach((d) => {
+      const v = d.data();
+      const row = document.createElement("div");
+      row.className = "history-row";
+      const info = document.createElement("div");
+      info.className = "history-info";
+      const when = document.createElement("div");
+      when.className = "history-when";
+      const ts = v.savedAt?.toDate ? v.savedAt.toDate() : null;
+      when.textContent = ts ? ts.toLocaleString("sv-SE") : "okänd tid";
+      const meta = document.createElement("div");
+      meta.className = "history-meta";
+      const fileCount = v.files ? Object.keys(v.files).length : 0;
+      const kb = v.sizeBytes ? (v.sizeBytes / 1024).toFixed(1) : "?";
+      meta.textContent = `${fileCount} filer • ${kb} KB • "${v.name || ""}"`;
+      info.append(when, meta);
+
+      const restore = document.createElement("button");
+      restore.className = "secondary";
+      restore.textContent = "Återställ";
+      restore.addEventListener("click", async () => {
+        const ok = await confirmDialog({
+          title: "Återställ version",
+          message: "Detta laddar versionens filer i editorn och skriver över din nuvarande osparade text. Du måste klicka Spara ändringar för att göra den aktuell.",
+          confirmText: "Ladda i editor",
+          danger: false,
+        });
+        if (!ok) return;
+        state.files = { ...(v.files || {}) };
+        state.autoNamed = new Set();
+        if (v.name) {
+          state.name = v.name;
+          modalSiteName.value = v.name;
+        }
+        const first = state.files["index.html"] ? "index.html" : Object.keys(state.files)[0];
+        if (first) selectFile(first);
+        setMsg(modalMsg, "Version inläst. Klicka Spara ändringar för att aktivera.", "ok");
+        closeFn();
+      });
+      row.append(info, restore);
+      list.append(row);
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="empty">Kunde inte hämta versioner: ${err.message}</p>`;
+  }
+}
+
+if (btnHistory) btnHistory.addEventListener("click", openHistory);
 
 // Close on backdrop click
 siteModal.addEventListener("click", (e) => {

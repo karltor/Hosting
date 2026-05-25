@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaderboard – Mini-Värd</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Crect%20width%3D'64'%20height%3D'64'%20rx%3D'14'%20fill%3D'%23f59e0b'%2F%3E%3Cpath%20d%3D'M32%208l6%2014%2014%202-10%2010%202%2014-12-6-12%206%202-14L12%2024l14-2z'%20fill%3D'white'%2F%3E%3C%2Fsvg%3E" />
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="leaderboard.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-head">
+        <a href="../" class="back-link">← Tillbaka</a>
+        <h2>🏆 Leaderboard</h2>
+        <button id="publishBtn">+ Publicera en sida</button>
+      </div>
+      <p class="lb-intro">Här samlas användarnas publicerade sidor och spel. Klicka för att spela – och betygsätt med stjärnor!</p>
+
+      <div id="bannedNotice" class="banned-notice" hidden>
+        🚫 Du är bannlyst från att publicera på leaderboard. Kontakta admin.
+      </div>
+
+      <ul id="boardList" class="board-list">
+        <li class="empty">Laddar…</li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- Publish modal -->
+  <div id="publishModal" class="overlay" hidden>
+    <div class="confirm-box publish-box">
+      <h3>Publicera till leaderboard</h3>
+      <p class="publish-hint">Välj en av dina sidor och fyll i ditt namn. Andra kan sedan spela och betygsätta den.</p>
+
+      <label class="publish-label">Välj din sida</label>
+      <select id="publishSiteSelect"></select>
+
+      <label class="publish-label">Ditt namn</label>
+      <input type="text" id="publishAuthor" maxlength="60" placeholder="t.ex. Karl T." />
+
+      <label class="publish-label">Kort beskrivning <span class="optional">(frivillig)</span></label>
+      <textarea id="publishDesc" maxlength="280" rows="3" placeholder="t.ex. Ett pong-spel med två spelare."></textarea>
+
+      <p id="publishMsg" class="msg"></p>
+      <div class="confirm-actions">
+        <button class="secondary" id="publishCancel">Avbryt</button>
+        <button id="publishOk">Publicera</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="leaderboard.js"></script>
+</body>
+</html>
