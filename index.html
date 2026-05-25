@@ -13,6 +13,7 @@
       <div class="panel-head">
         <h2>Mina sidor</h2>
         <span id="siteCount" class="site-count"></span>
+        <a href="leaderboard/" class="leaderboard-link">🏆 Leaderboard</a>
         <button id="newSiteBtn">+ Ny sida</button>
       </div>
       <div id="sitesEmpty" class="onboarding" hidden>
@@ -33,6 +34,7 @@
       <header class="modal-head">
         <input type="text" id="modalSiteName" maxlength="60" placeholder="Sidans namn (t.ex. Mitt skolprojekt)" />
         <div class="editor-tools">
+          <button type="button" id="btnHistory" class="secondary" title="Versionshistorik" hidden>↶ Historik</button>
           <button type="button" id="btnCopy" class="secondary" title="Kopiera (Ctrl+C)">Kopiera</button>
           <button type="button" id="btnPaste" class="secondary" title="Klistra in (Ctrl+V)">Klistra in</button>
           <button type="button" id="btnSelectAll" class="secondary" title="Markera allt (Ctrl+A)">Markera allt</button>
