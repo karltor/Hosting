@@ -33,7 +33,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const boardList = document.getElementById("boardList");
+const boardTbody = document.getElementById("boardTbody");
 const publishBtn = document.getElementById("publishBtn");
 const publishModal = document.getElementById("publishModal");
 const publishSiteSelect = document.getElementById("publishSiteSelect");
@@ -180,81 +180,77 @@ function render() {
     return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
   });
 
-  boardList.innerHTML = "";
+  boardTbody.innerHTML = "";
   if (!items.length) {
-    boardList.innerHTML = '<li class="empty">Inga publicerade sidor än. Bli först!</li>';
+    boardTbody.innerHTML = '<tr><td colspan="7" class="empty">Inga publicerade sidor än. Bli först!</td></tr>';
     return;
   }
 
   items.forEach((p, idx) => {
-    const li = document.createElement("li");
-    li.className = "board-card";
-    if (idx === 0) li.classList.add("top-1");
-    else if (idx === 1) li.classList.add("top-2");
-    else if (idx === 2) li.classList.add("top-3");
+    const tr = document.createElement("tr");
+    if (idx === 0) tr.classList.add("top-1");
+    else if (idx === 1) tr.classList.add("top-2");
+    else if (idx === 2) tr.classList.add("top-3");
 
-    const rank = document.createElement("div");
-    rank.className = "board-rank";
-    rank.textContent = "#" + (idx + 1);
+    const tdRank = document.createElement("td");
+    tdRank.className = "col-rank";
+    const rankBadge = document.createElement("span");
+    rankBadge.className = "rank-badge";
+    rankBadge.textContent = idx + 1;
+    tdRank.append(rankBadge);
 
-    const title = document.createElement("div");
-    title.className = "board-title";
-    title.textContent = p.siteName || "(utan namn)";
+    const tdName = document.createElement("td");
+    tdName.className = "col-name";
+    tdName.textContent = p.siteName || "(utan namn)";
 
-    const author = document.createElement("div");
-    author.className = "board-author";
-    author.textContent = "av " + (p.authorName || "okänd");
+    const tdAuthor = document.createElement("td");
+    tdAuthor.className = "col-author";
+    tdAuthor.textContent = p.authorName || "okänd";
 
-    li.append(rank, title, author);
+    const tdDesc = document.createElement("td");
+    tdDesc.className = "col-desc";
+    tdDesc.textContent = p.description || "";
+    if (p.description) tdDesc.title = p.description;
 
-    if (p.description) {
-      const desc = document.createElement("div");
-      desc.className = "board-desc";
-      desc.textContent = p.description;
-      li.append(desc);
-    }
-
-    const ratingWrap = document.createElement("div");
-    ratingWrap.className = "board-rating";
+    const tdRating = document.createElement("td");
+    tdRating.className = "col-rating";
     const mine = myRating(p.id);
-    ratingWrap.append(buildStars(p.id, p._avg, mine));
+    tdRating.append(buildStars(p.id, p._avg, mine));
 
-    const ratingText = document.createElement("div");
-    ratingText.className = "rating-text";
+    const tdAvg = document.createElement("td");
+    tdAvg.className = "col-avg";
     if (p._count > 0) {
-      ratingText.innerHTML = `<strong>${p._avg.toFixed(1)}</strong> / 5 (${p._count} röster)`;
-      if (mine) ratingText.innerHTML += ` • <span class="your">Du: ${mine}★</span>`;
+      tdAvg.innerHTML = `<strong>${p._avg.toFixed(1)}</strong> <span class="muted">(${p._count})</span>`;
+      if (mine) tdAvg.innerHTML += ` <span class="your">·${mine}★</span>`;
     } else {
-      ratingText.innerHTML = "<em>Inga röster än</em>";
+      tdAvg.innerHTML = '<span class="muted">—</span>';
     }
-    ratingWrap.append(ratingText);
-    li.append(ratingWrap);
 
-    const actions = document.createElement("div");
-    actions.className = "board-actions";
-
+    const tdActions = document.createElement("td");
+    tdActions.className = "col-actions";
     const playLink = document.createElement("a");
     playLink.href = viewUrlFor(p.siteId);
     playLink.target = "_blank";
     playLink.rel = "noopener";
-    playLink.textContent = "▶ Spela / öppna";
-    actions.append(playLink);
+    playLink.className = "play-btn";
+    playLink.textContent = "▶ Öppna";
+    tdActions.append(playLink);
 
     if (currentUser && p.ownerUid === currentUser.uid) {
       const rm = document.createElement("button");
       rm.className = "remove-btn";
-      rm.textContent = "Ta bort";
+      rm.textContent = "✕";
       rm.title = "Avpublicera din post";
       rm.addEventListener("click", async () => {
         if (!confirm(`Avpublicera "${p.siteName}" från leaderboard?`)) return;
         try { await deleteDoc(doc(db, "published", p.id)); }
         catch (e) { alert("Kunde inte ta bort: " + e.message); }
       });
-      actions.append(rm);
+      tdActions.append(rm);
     }
-    li.append(actions);
 
-    boardList.append(li);
+    tr.append(tdRank, tdName, tdAuthor, tdDesc, tdRating, tdAvg, tdActions);
+    boardTbody.append(tr);
   });
 }
 
