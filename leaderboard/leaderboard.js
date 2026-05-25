@@ -51,14 +51,18 @@ let unsubPublished = null;
 let ratingUnsubs = {}; // pid -> unsubscribe
 let isBanned = false;
 
+// Start published-listener immediately — reads are public so we don't need
+// to wait for anonymous sign-in (which can take a couple of seconds).
+startListeners();
+
+// Kick off anonymous auth in the background so users can rate/publish soon.
+signInAnonymously(auth).catch((e) => console.error(e));
+
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    try { await signInAnonymously(auth); } catch (e) { console.error(e); }
-    return;
-  }
+  if (!user) return;
   currentUser = user;
   await checkBanned();
-  startListeners();
+  render(); // re-render now that we know current user (for "Ta bort" buttons + own ratings)
 });
 
 async function checkBanned() {
