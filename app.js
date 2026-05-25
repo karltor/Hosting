@@ -932,11 +932,11 @@ async function saveModal() {
         updatedAt: serverTimestamp(),
       });
       cacheAdd({ id, name, updatedAt: Date.now() });
-      // Initial version snapshot (best-effort; ignore failure)
       try {
         await addDoc(collection(db, "sites", id, "versions"), {
           name, files: state.files, sizeBytes: total, savedAt: serverTimestamp(),
         });
+        pruneVersions(id);
       } catch (_) {}
     } else {
       await updateDoc(doc(db, "sites", state.id), {
@@ -950,6 +950,7 @@ async function saveModal() {
         await addDoc(collection(db, "sites", state.id, "versions"), {
           name, files: state.files, sizeBytes: total, savedAt: serverTimestamp(),
         });
+        pruneVersions(state.id);
       } catch (_) {}
     }
     closeModal();
@@ -1005,6 +1006,22 @@ btnPaste.addEventListener("click", async () => {
 });
 
 // --- Version history ---
+const MAX_VERSIONS = 5;
+
+async function pruneVersions(siteId) {
+  try {
+    const q = query(
+      collection(db, "sites", siteId, "versions"),
+      orderBy("savedAt", "desc"),
+    );
+    const snap = await getDocs(q);
+    const docs = [];
+    snap.forEach((d) => docs.push(d));
+    const toDelete = docs.slice(MAX_VERSIONS);
+    await Promise.all(toDelete.map((d) => deleteDoc(d.ref)));
+  } catch (_) {}
+}
+
 async function openHistory() {
   if (!state || state.mode !== "edit" || !state.id) return;
 
@@ -1038,7 +1055,7 @@ async function openHistory() {
     const q = query(
       collection(db, "sites", state.id, "versions"),
       orderBy("savedAt", "desc"),
-      limit(30),
+      limit(MAX_VERSIONS),
     );
     const snap = await getDocs(q);
     list.innerHTML = "";
@@ -1074,6 +1091,9 @@ async function openHistory() {
           danger: false,
         });
         if (!ok) return;
+        // Null out active first so selectFile's syncActive doesn't overwrite
+        // the freshly restored file with the old editor contents.
+        state.active = null;
         state.files = { ...(v.files || {}) };
         state.autoNamed = new Set();
         if (v.name) {
