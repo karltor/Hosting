@@ -119,10 +119,20 @@
         const key = matchFile(el.getAttribute("src"), files);
         if (key) {
           const replacement = docp.createElement("script");
+          // `defer` only works on external scripts; on inline scripts it's
+          // ignored, so a script that originally said `defer` would run
+          // synchronously and could outrun a still-loading CDN dependency.
+          // Wrap the body in a DOMContentLoaded listener so it still runs
+          // after the document is parsed.
+          const hadDefer = el.hasAttribute("defer");
           for (const attr of [...el.attributes]) {
-            if (attr.name !== "src") replacement.setAttribute(attr.name, attr.value);
+            if (attr.name === "src" || attr.name === "defer") continue;
+            replacement.setAttribute(attr.name, attr.value);
           }
-          replacement.textContent = files[key];
+          const code = files[key];
+          replacement.textContent = hadDefer
+            ? "document.addEventListener('DOMContentLoaded',function(){\n" + code + "\n});"
+            : code;
           el.replaceWith(replacement);
         }
       });
