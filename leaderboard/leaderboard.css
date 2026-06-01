@@ -11,7 +11,9 @@
   font-size: .9rem;
 }
 
-.group-notice {
+/* :not([hidden]) so the `hidden` attribute (UA display:none) is respected —
+   a bare `display: flex` here would override it and show the banner always. */
+.group-notice:not([hidden]) {
   background: #ecfeff;
   border: 1px solid #67e8f9;
   color: #0e7490;
