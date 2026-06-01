@@ -11,6 +11,38 @@
   font-size: .9rem;
 }
 
+.group-notice {
+  background: #ecfeff;
+  border: 1px solid #67e8f9;
+  color: #0e7490;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: .9rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.group-notice strong { color: #155e75; }
+.group-clear {
+  margin-left: auto;
+  color: #0e7490;
+  text-decoration: none;
+  font-weight: 600;
+}
+.group-clear:hover { text-decoration: underline; }
+
+.group-tag {
+  display: inline-block;
+  background: #cffafe;
+  color: #0e7490;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: .75rem;
+  margin-left: 6px;
+}
+
 .banned-notice {
   background: #fee2e2;
   border: 1px solid #fca5a5;
