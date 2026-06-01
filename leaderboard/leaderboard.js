@@ -43,6 +43,27 @@ const publishOk = document.getElementById("publishOk");
 const publishCancel = document.getElementById("publishCancel");
 const publishMsg = document.getElementById("publishMsg");
 const bannedNotice = document.getElementById("bannedNotice");
+const groupNotice = document.getElementById("groupNotice");
+const groupNameEl = document.getElementById("groupName");
+
+// Parse group suffix from URL. Supports both `?8EF` (bare) and `?group=8EF`.
+const groupFilter = (() => {
+  const raw = location.search.slice(1);
+  if (!raw) return null;
+  if (raw.includes("=")) {
+    const g = new URLSearchParams(location.search).get("group");
+    return g ? g.trim() : null;
+  }
+  return decodeURIComponent(raw).trim() || null;
+})();
+
+if (groupFilter && groupNotice) {
+  groupNameEl.textContent = groupFilter;
+  const inline = document.getElementById("groupNameInline");
+  if (inline) inline.textContent = groupFilter;
+  groupNotice.hidden = false;
+  document.title = `Leaderboard – ${groupFilter}`;
+}
 
 let currentUser = null;
 let publishedItems = []; // [{id, ...data}]
@@ -171,7 +192,10 @@ function viewUrlFor(siteId) {
 
 function render() {
   // Sort: by avg desc, then count desc, then createdAt desc
-  const items = publishedItems.map((p) => {
+  const source = groupFilter
+    ? publishedItems.filter((p) => p.group === groupFilter)
+    : publishedItems;
+  const items = source.map((p) => {
     const { avg, count } = avgFor(p.id);
     return { ...p, _avg: avg, _count: count };
   }).sort((a, b) => {
@@ -202,6 +226,14 @@ function render() {
     const tdName = document.createElement("td");
     tdName.className = "col-name";
     tdName.textContent = p.siteName || "(utan namn)";
+    if (p.group && !groupFilter) {
+      const tag = document.createElement("a");
+      tag.className = "group-tag";
+      tag.href = `./?${encodeURIComponent(p.group)}`;
+      tag.textContent = `#${p.group}`;
+      tag.title = `Visa endast gruppen ${p.group}`;
+      tdName.append(tag);
+    }
 
     const tdAuthor = document.createElement("td");
     tdAuthor.className = "col-author";
@@ -324,14 +356,16 @@ publishOk.addEventListener("click", async () => {
 
   publishOk.disabled = true;
   try {
-    await addDoc(collection(db, "published"), {
+    const payload = {
       ownerUid: currentUser.uid,
       siteId,
       siteName,
       authorName,
       description,
       createdAt: serverTimestamp(),
-    });
+    };
+    if (groupFilter) payload.group = groupFilter;
+    await addDoc(collection(db, "published"), payload);
     publishModal.hidden = true;
   } catch (e) {
     publishMsg.textContent = "Kunde inte publicera: " + e.message;
